@@ -141,6 +141,23 @@ lerobot-record \
   --dataset.reset_time_s=10
 
 
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM1 \
+  --robot.id=R07254808 \
+  --robot.cameras="{'handeye': {'type': 'opencv', 'index_or_path': 2, 'width': 640, 'height': 480, 'fps': 30, 'fourcc': 'MJPG'}, 'fixed': {'type': 'opencv', 'index_or_path': 0, 'width': 640, 'height': 480, 'fps': 30,  'fourcc': 'MJPG'}}" \
+  --teleop.type=so101_leader \
+  --teleop.port=/dev/ttyACM0 \
+  --teleop.id=R07254808 \
+  --display_data=true \
+  --dataset.single_task="Grab the plastic bottle and put it in the bowl.​ ." \
+  --policy.path=/home/wair/yangsheng/models/gr00t_11171252 \
+  --policy.device=cuda \
+  --dataset.repo_id=wair/eval_so101_11171252_gr00t \
+  --dataset.push_to_hub=false \
+  --dataset.episode_time_s=300 \
+  --dataset.reset_time_s=10
+
 
 
   /home/wair/yangsheng/train/gr00t_so101_train_11162242/pretrained_model
