@@ -6,8 +6,6 @@ WORKDIR /workspace/lerobot
 
 COPY . .
 
-RUN ${PIP} install -e ".[pi]" -i https://pypi.tuna.tsinghua.edu.cn/simple/
-
-RUN ${PIP} install transformers==4.57.1 -i https://pypi.tuna.tsinghua.edu.cn/simple/
+RUN ${PIP} install -e "." -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
 CMD ["sleep", "3600000"]
