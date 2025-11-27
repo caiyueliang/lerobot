@@ -5,14 +5,14 @@
 # 初始化参数数组
 final_args=()
 
-# 第一个参数是模型名称
-if [[ $# -gt 0 ]]; then
-    model_name="$1"
-    shift
-else
-    echo "错误: 需要指定模型名称"
-    exit 1
-fi
+# # 第一个参数是模型名称
+# if [[ $# -gt 0 ]]; then
+#     model_name="$1"
+#     shift
+# else
+#     echo "错误: 需要指定模型名称"
+#     exit 1
+# fi
 
 # 遍历所有传入的参数
 while [[ $# -gt 0 ]]; do
@@ -20,13 +20,13 @@ while [[ $# -gt 0 ]]; do
         --data_path=*|--data-path=*)
             # 将 --data_path 或 --data-path 映射为 --data.repo-id
             value="${1#*=}"
-            final_args+=(--data.repo-id="$value")
+            final_args+=(--dataset.repo_id="$value")
             shift
             ;;
         --output_path=*|--output-path=*)
             # 将 --output_path 或 --output-path 映射为 --checkpoint-base-dir
             value="${1#*=}"
-            final_args+=(--checkpoint-base-dir="$value")
+            final_args+=(--output_dir="$value")
             shift
             ;;
         --val_split_ratio=*|--val-split-ratio=*)
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
         --data_path|--data-path)
             # 处理 --data_path value 格式（带空格）
             if [[ $# -gt 1 ]]; then
-                final_args+=(--data.repo-id="$2")
+                final_args+=(--dataset.repo_id="$2")
                 shift 2
             else
                 echo "错误: --data_path 需要参数值"
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
         --output_path|--output-path)
             # 处理 --output_path value 格式（带空格）
             if [[ $# -gt 1 ]]; then
-                final_args+=(--checkpoint-base-dir="$2")
+                final_args+=(--output_dir="$2")
                 shift 2
             else
                 echo "错误: --output_path 需要参数值"
@@ -73,16 +73,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# # 切换到工作目录
-# cd /home/caiyueliang/openpi || {
-#     echo "错误: 无法切换到 /home/caiyueliang/openpi 目录"
-#     exit 1
-# }
-
 # 打印转换后的命令（用于调试）
 echo "【转换后的命令】"
-echo "uv run scripts/train.py '$model_name' ${final_args[@]}"
+echo "python src/lerobot/scripts/lerobot_train.py ${final_args[@]}"
 echo ""
 
 # 执行训练命令
-uv run scripts/train.py "$model_name" "${final_args[@]}"
+python src/lerobot/scripts/lerobot_train.py "${final_args[@]}"

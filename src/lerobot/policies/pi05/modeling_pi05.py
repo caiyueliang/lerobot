@@ -361,7 +361,7 @@ class PaliGemmaWithExpertModel(
             num_key_value_heads=action_expert_config.num_kv_heads,
             vocab_size=257152,
             hidden_activation="gelu_pytorch_tanh",
-            dtype="float32",
+            torch_dtype="float32",
             use_adarms=use_adarms[1],
             adarms_cond_dim=action_expert_config.width if use_adarms[1] else None,
         )
