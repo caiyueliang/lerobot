@@ -51,6 +51,9 @@ from lerobot.utils.utils import (
     init_logging,
 )
 
+import os
+from lerobot.taichu.metrics_logger import MetricsLogger
+
 
 def update_policy(
     train_metrics: MetricsTracker,
@@ -161,6 +164,12 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     # Only log on main process
     if is_main_process:
         logging.info(pformat(cfg.to_dict()))
+
+        # TODO: CYL: Add metrics logger
+        metrics_logger = MetricsLogger(
+            output_dir=os.path.join(cfg.output_dir, "metrics"),
+            filename="loss.json"
+        )
 
     # Initialize wandb only on main process
     if cfg.wandb.enable and cfg.wandb.project and is_main_process:
@@ -354,6 +363,15 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
                 if output_dict:
                     wandb_log_dict.update(output_dict)
                 wandb_logger.log_dict(wandb_log_dict, step)
+
+            # TODO: CYL: 保存loss
+            metrics_logger.log_step(
+                step=step,
+                global_step=step,
+                loss=train_metrics["loss"].val,
+                lr=train_metrics["lr"].val,
+            )
+
             train_tracker.reset_averages()
 
         if cfg.save_checkpoint and is_saving_step:
