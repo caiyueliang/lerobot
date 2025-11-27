@@ -1,0 +1,13 @@
+FROM tck-xinan-registry.cn-chengdu.cr.aliyuncs.com/wair/lerobot:0.0.2
+
+ARG PIP="/root/miniconda3/envs/gr00t/bin/pip"
+
+WORKDIR /workspace/lerobot
+
+COPY . .
+
+RUN ${PIP} install -e ".[pi]" -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+RUN ${PIP} install transformers==4.57.1 -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+CMD ["sleep", "3600000"]
