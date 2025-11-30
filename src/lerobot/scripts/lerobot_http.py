@@ -204,6 +204,14 @@ def main():
 
 
     # 初始化
+    # 如果 --dataset-repo-id 未提供，尝试从环境变量获取
+    if args.dataset_repo_id is None:
+        args.dataset_repo_id = os.getenv("DATASET_REPO_ID")
+        if args.dataset_repo_id:
+            logging.warning(f"[main] 使用环境变量 DATASET_REPO_ID: {args.dataset_repo_id}")
+        else:
+            logging.warning("[main] 未提供 --dataset-repo-id，且环境变量 DATASET_REPO_ID 未设置。")
+
     required_file = 'config.json'
     base_dir = find_first_matching_dir(
         root_dir=args.policy_path, 
