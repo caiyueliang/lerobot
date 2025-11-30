@@ -19,6 +19,8 @@ from lerobot.utils.utils import get_safe_torch_device
 from lerobot.utils.control_utils import predict_action
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
+logging.basicConfig(level=logging.INFO)
+
 # 全局变量（在实际部署中建议用 lifespan 或依赖注入）
 states_len = os.getenv('STATES_LEN', 6)
 policy = None
@@ -146,6 +148,52 @@ def load_policy(policy_path: str, dataset_repo_id: str = None):
 
     logging.info(f"Policy loaded from {policy_path} on device {device}")
 
+
+# def find_first_params_dir(root_dir, keyword='params'):
+#     """
+#     在给定的根目录下，查找第一个包含名为 keyword('params') 的子文件夹的目录，
+#     并返回该目录的路径。如果未找到，返回 None。
+    
+#     :param root_dir: 要搜索的根目录路径（字符串）
+#     :return: 第一个包含 keyword 子目录的目录路径（字符串）或 None
+#     """
+#     for dirpath, dirnames, _ in os.walk(root_dir):
+#         if keyword in dirnames:
+#             return dirpath
+#     return None
+def find_first_matching_dir(root_dir, required_file, required_dir=None):
+    """
+    在给定的根目录下，查找第一个满足以下条件的目录：
+    1. 目录下包含名为 required_file 的文件；
+    2. 如果 required_dir 不为 None 且非空，则该目录的路径中必须包含名为 required_dir 的某一级目录名。
+
+    参数:
+        root_dir (str 或 Path): 要搜索的根目录。
+        required_file (str): 必须存在的文件名（仅文件名，不带路径）。
+        required_dir (str, optional): 路径中必须包含的目录名。若为 None 或空字符串，则跳过此条件。
+
+    返回:
+        Path 或 None: 找到的第一个匹配目录，否则返回 None。
+    """
+    root = Path(root_dir)
+    if not root.is_dir():
+        raise ValueError(f"根目录 {root_dir} 不存在或不是目录")
+
+    for current_dir in [root] + list(root.rglob('*')):
+        if not current_dir.is_dir():
+            continue
+
+        # 检查路径是否包含 required_dir（如果指定了）
+        if required_dir:
+            if required_dir not in current_dir.parts:
+                continue
+
+        # 检查该目录下是否有 required_file
+        if (current_dir / required_file).is_file():
+            return current_dir
+
+    return None
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy-path", type=str, required=True, help="Path or HF repo ID of the pretrained policy")
@@ -154,7 +202,21 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+
+    # 初始化
+    required_file = 'config.json'
+    base_dir = find_first_matching_dir(
+        root_dir=args.policy_path, 
+        required_file=required_file)
+    if base_dir:
+        logging.warning(f"[main] 目录: {base_dir} 中找到 '{required_file}' 子文件夹，使用该目录作为模型路径。")
+        args.policy_path = base_dir
+        logging.warning(f"[main] new args: {args}")
+    else:
+        logging.warning(f"[main] 目录: {args.policy_path} 中未找到 '{required_file}' 子文件夹，请检查模型路径。")
+        exit(1)
+
+
     load_policy(args.policy_path, args.dataset_repo_id)
 
     import uvicorn
