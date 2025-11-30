@@ -1,9 +1,13 @@
 # inference_server.py
 import argparse
 import logging
+import numpy as np
+from PIL import Image
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
+import base64
+from io import BytesIO
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,21 +31,53 @@ robot_type = ""
 
 app = FastAPI(title="LeRobot Policy Inference Server")
 
-class ObservationInput(BaseModel):
-    observation: Dict[str, Any]  # e.g., {"image": "...", "state": [...]}
+class InferenceRequest(BaseModel):
+    image: Optional[str] = None
+    wrist_image: Optional[str] = None
+    state: Optional[list] = None
+    prompt: Optional[str] = None  # 如果请求没给，则使用 default_prompt
 
-class ActionOutput(BaseModel):
-    action: Dict[str, Any]
+class InferenceResponse(BaseModel):
+    status: int = 0
+    message: str = "success"
+    result: Dict[str, Any] = {}
+# class ObservationInput(BaseModel):
+#     observation: Dict[str, Any]  # e.g., {"image": "...", "state": [...]}
 
-@app.post("/predict", response_model=ActionOutput)
-async def predict(obs_input: ObservationInput):
+# class ActionOutput(BaseModel):
+#     action: Dict[str, Any]
+
+
+def base64_to_pil(b64_str: str):
+    try:
+        image_data = base64.b64decode(b64_str)
+        image = Image.open(BytesIO(image_data))
+        img_array = np.array(image)
+        return img_array
+    except Exception as e:
+        raise ValueError(f"Invalid base64 image: {e}")
+    
+@app.post("/act", response_model=InferenceResponse)
+async def predict(request: InferenceRequest):
     global policy, preprocessor, postprocessor, features, device, use_amp, task, robot_type
     if policy is None:
         raise HTTPException(status_code=500, detail="Policy not loaded")
 
     try:
+        logging.info(f"[act] Received request: {request.prompt}; {request.state}")
+
+        # if len(request.state) != states_len:
+        #     return InferenceResponse(status=1, message=f"invalid state length, need size: (1 x {states_len})")
+        # 构造输入数据（根据你的 policy 接口调整）
+        data = {
+            "observation/image": base64_to_pil(request.image),
+            "observation/wrist_image": base64_to_pil(request.wrist_image),
+            "observation/state": np.array(request.state),
+            "prompt": request.prompt,
+        }
+        
         action_values = predict_action(
-            observation=obs_input.observation,
+            observation=data,
             policy=policy,
             device=device,
             preprocessor=preprocessor,
@@ -51,10 +87,14 @@ async def predict(obs_input: ObservationInput):
             robot_type=robot_type,
         )
         robot_action = make_robot_action(action_values, features)
-        return ActionOutput(action=robot_action)
+        logging.info(f"[act] Predicted action: {robot_action}")
+        result = {
+                "action": robot_action.tolist(),
+            }
+        return InferenceResponse(status=0, result=result, message="success")
     except Exception as e:
-        logging.exception("Prediction failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.exception(e)
+        raise InferenceResponse(status=1, message=f"{str(e)}")
 
 def load_policy(policy_path: str, dataset_repo_id: str = None):
     global policy, preprocessor, postprocessor, dataset_meta, features, device, use_amp, task, robot_type
