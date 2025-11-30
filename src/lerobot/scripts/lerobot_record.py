@@ -306,6 +306,10 @@ def record_loop(
 
         # Get action from either policy or teleop
         if policy is not None and preprocessor is not None and postprocessor is not None:
+            # TODO: CYL
+            # import ipdb
+            # ipdb.set_trace()
+            
             action_values = predict_action(
                 observation=observation_frame,
                 policy=policy,

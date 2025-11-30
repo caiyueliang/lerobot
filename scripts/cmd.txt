@@ -205,6 +205,10 @@ rm -rf /home/wair/.cache/huggingface/lerobot/wair/eval_so101_11171252_gr00t && \
     'observation.images.handeye': array([[]], shape=(480, 640, 3), dtype=uint8), 
     'observation.images.fixed': array([[]], shape=(480, 640, 3), dtype=uint8)
 }
+
+ipdb> single_task
+'Grab the plastic bottle and put it in the bowl.\u200b .'
+
   
   
   {'observation.state': array([ 16.13212  ,  59.35374  , -55.23179  ,  95.854485 ,   6.9108667,
