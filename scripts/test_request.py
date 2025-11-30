@@ -14,8 +14,8 @@ def parse_args():
     parser.add_argument(
         "--url",
         type=str,
-        default="http://localhost:8000/act",
-        help="推理服务完整 URL，默认 http://localhost:8000/act",
+        default="http://localhost:8080/act",
+        help="推理服务完整 URL，默认 http://localhost:8080/act",
     )
     parser.add_argument(
         "--token",

@@ -199,7 +199,7 @@ def main():
     parser.add_argument("--policy-path", type=str, required=True, help="Path or HF repo ID of the pretrained policy")
     parser.add_argument("--dataset-repo-id", type=str, default=None, help="Optional: HuggingFace dataset repo to load metadata/features")
     parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
 
 
