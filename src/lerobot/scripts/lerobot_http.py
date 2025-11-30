@@ -196,7 +196,7 @@ def find_first_matching_dir(root_dir, required_file, required_dir=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--policy-path", type=str, required=True, help="Path or HF repo ID of the pretrained policy")
+    parser.add_argument("--policy-path", type=str, default=None, help="Path or HF repo ID of the pretrained policy")
     parser.add_argument("--dataset-repo-id", type=str, default=None, help="Optional: HuggingFace dataset repo to load metadata/features")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
@@ -205,6 +205,12 @@ def main():
 
     # 初始化
     # 如果 --dataset-repo-id 未提供，尝试从环境变量获取
+    if args.policy_path is None:
+        args.policy_path = os.getenv("MODEL_PATH")
+        if args.policy_path:
+            logging.warning(f"[main] 使用环境变量 MODEL_PATH: {args.policy_path}")
+        else:
+            logging.warning("[main] 未提供 --policy-path，且环境变量 MODEL_PATH 未设置。")
     if args.dataset_repo_id is None:
         args.dataset_repo_id = os.getenv("DATASET_REPO_ID")
         if args.dataset_repo_id:
