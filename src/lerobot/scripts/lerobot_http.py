@@ -1,4 +1,5 @@
 # inference_server.py
+import os
 import argparse
 import logging
 import numpy as np
@@ -19,6 +20,7 @@ from lerobot.utils.control_utils import predict_action
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 # 全局变量（在实际部署中建议用 lifespan 或依赖注入）
+states_len = os.getenv('STATES_LEN', 6)
 policy = None
 preprocessor = None
 postprocessor = None
@@ -26,7 +28,6 @@ dataset_meta = None
 features = None
 device = None
 use_amp = False
-task = ""
 robot_type = ""
 
 app = FastAPI(title="LeRobot Policy Inference Server")
@@ -70,7 +71,7 @@ async def predict(request: InferenceRequest):
 
         # if len(request.state) != states_len:
         #     return InferenceResponse(status=1, message=f"invalid state length, need size: (1 x {states_len})")
-        # 构造输入数据（根据你的 policy 接口调整）
+
         data = {
             "observation.images.fixed": base64_to_pil(request.image),
             "observation.images.handeye": base64_to_pil(request.wrist_image),
@@ -99,7 +100,7 @@ async def predict(request: InferenceRequest):
         raise InferenceResponse(status=1, message=f"{str(e)}")
 
 def load_policy(policy_path: str, dataset_repo_id: str = None):
-    global policy, preprocessor, postprocessor, dataset_meta, features, device, use_amp, task, robot_type
+    global policy, preprocessor, postprocessor, dataset_meta, features, device, use_amp, robot_type
 
     # Load a dummy dataset to get meta & features (required for preprocessing)
     if dataset_repo_id:
@@ -122,7 +123,6 @@ def load_policy(policy_path: str, dataset_repo_id: str = None):
     policy = make_policy(policy_cfg, ds_meta=dataset.meta)
     device = get_safe_torch_device(policy.config.device)
     use_amp = policy.config.use_amp
-    task = getattr(policy_cfg, "task", "")
     robot_type = getattr(policy_cfg, "robot_type", "")
 
     # 获取 features（简化：直接从 policy config 或 dataset）
