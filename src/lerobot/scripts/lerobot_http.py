@@ -48,18 +48,20 @@ class InferenceResponse(BaseModel):
 #     action: Dict[str, Any]
 
 
-def base64_to_pil(b64_str: str):
+def base64_to_pil(b64_str: str, target_size=(480, 640)):
     try:
         image_data = base64.b64decode(b64_str)
         image = Image.open(BytesIO(image_data))
-        img_array = np.array(image)
+        resized_image = image.resize(target_size)
+        img_array = np.array(resized_image)
+        logging.warning(f"[act] Received image: {img_array.shape}")
         return img_array
     except Exception as e:
         raise ValueError(f"Invalid base64 image: {e}")
     
 @app.post("/act", response_model=InferenceResponse)
 async def predict(request: InferenceRequest):
-    global policy, preprocessor, postprocessor, features, device, use_amp, task, robot_type
+    global policy, preprocessor, postprocessor, features, device, use_amp, robot_type
     if policy is None:
         raise HTTPException(status_code=500, detail="Policy not loaded")
 
@@ -73,9 +75,9 @@ async def predict(request: InferenceRequest):
             "observation.images.fixed": base64_to_pil(request.image),
             "observation.images.handeye": base64_to_pil(request.wrist_image),
             "observation.state": np.array(request.state),
-            "prompt": request.prompt,
         }
         
+        task = request.prompt,
         action_values = predict_action(
             observation=data,
             policy=policy,
@@ -87,9 +89,9 @@ async def predict(request: InferenceRequest):
             robot_type=robot_type,
         )
         robot_action = make_robot_action(action_values, features)
-        logging.info(f"[act] Predicted action: {robot_action}")
+        logging.warning(f"[act] Predicted action: {robot_action}")
         result = {
-                "action": robot_action.tolist(),
+                "action": robot_action,
             }
         return InferenceResponse(status=0, result=result, message="success")
     except Exception as e:
