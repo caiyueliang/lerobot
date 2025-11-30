@@ -57,7 +57,7 @@ def base64_to_pil(b64_str: str, target_size=(480, 640)):
         image = Image.open(BytesIO(image_data))
         resized_image = image.resize(target_size)
         img_array = np.array(resized_image)
-        logging.warning(f"[act] Received image: {img_array.shape}")
+        # logging.warning(f"[act] Received image: {img_array.shape}")
         return img_array
     except Exception as e:
         raise ValueError(f"Invalid base64 image: {e}")
