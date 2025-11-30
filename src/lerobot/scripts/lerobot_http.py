@@ -77,7 +77,7 @@ async def predict(request: InferenceRequest):
             "observation.state": np.array(request.state),
         }
         
-        task = request.prompt,
+        task = request.prompt
         action_values = predict_action(
             observation=data,
             policy=policy,
