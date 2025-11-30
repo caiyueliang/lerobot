@@ -70,9 +70,9 @@ async def predict(request: InferenceRequest):
         #     return InferenceResponse(status=1, message=f"invalid state length, need size: (1 x {states_len})")
         # 构造输入数据（根据你的 policy 接口调整）
         data = {
-            "observation/image": base64_to_pil(request.image),
-            "observation/wrist_image": base64_to_pil(request.wrist_image),
-            "observation/state": np.array(request.state),
+            "observation.images.fixed": base64_to_pil(request.image),
+            "observation.images.handeye": base64_to_pil(request.wrist_image),
+            "observation.state": np.array(request.state),
             "prompt": request.prompt,
         }
         

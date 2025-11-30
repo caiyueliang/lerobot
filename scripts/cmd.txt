@@ -200,7 +200,11 @@ rm -rf /home/wair/.cache/huggingface/lerobot/wair/eval_so101_11171252_gr00t && \
   --dataset.reset_time_s=10
   
   
-  
+{
+    'observation.state': array([ 16.13212  ,  59.35374  , -55.23179  ,  95.854485 ,   6.9108667, 34.36893  ], dtype=float32), 
+    'observation.images.handeye': array([[]], shape=(480, 640, 3), dtype=uint8), 
+    'observation.images.fixed': array([[]], shape=(480, 640, 3), dtype=uint8)
+}
   
   
   {'observation.state': array([ 16.13212  ,  59.35374  , -55.23179  ,  95.854485 ,   6.9108667,
