@@ -204,7 +204,6 @@ def main():
 
 
     # 初始化
-    # 如果 --dataset-repo-id 未提供，尝试从环境变量获取
     if args.policy_path is None:
         args.policy_path = os.getenv("MODEL_PATH")
         if args.policy_path:
@@ -217,7 +216,10 @@ def main():
             logging.warning(f"[main] 使用环境变量 DATASET_REPO_ID: {args.dataset_repo_id}")
         else:
             logging.warning("[main] 未提供 --dataset-repo-id，且环境变量 DATASET_REPO_ID 未设置。")
+    args.host = os.getenv("HOST", args.host)
+    args.port = int(os.getenv("PORT", args.port))
 
+    # 动态获取模型加载路径
     required_file = 'config.json'
     base_dir = find_first_matching_dir(
         root_dir=args.policy_path, 
