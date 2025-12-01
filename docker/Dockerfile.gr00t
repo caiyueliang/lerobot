@@ -11,4 +11,6 @@ RUN ${PIP} install -e "." -i https://pypi.tuna.tsinghua.edu.cn/simple/
 RUN ${PIP} install transformers==4.57.1 -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
 # CMD ["sleep", "3600000"]
-CMD ["/bin/bash", "-c", "source /root/miniconda3/bin/activate gr00t && python src/lerobot/scripts/lerobot_http.py"]
+ENTRYPOINT []
+CMD ["bash", "-c", "source /root/miniconda3/bin/activate gr00t && python src/lerobot/scripts/lerobot_http.py"]
+# CMD ["/root/miniconda3/envs/gr00t/bin/python", "src/lerobot/scripts/lerobot_http.py"]
