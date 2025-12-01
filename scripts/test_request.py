@@ -46,7 +46,7 @@ def main():
     request_data = {
         "image": image_to_base64(head_img_path),
         "wrist_image": image_to_base64(wrist_left_img_path),
-        "state": [16.13212, 59.35374, -55.23179, 95.854485, 6.9108667, 34.36893],
+        "state": [0.13212, 0.35374, -0.23179, 0.854485, 0.9108667, 0.36893],
         "prompt": "Pick up the bowl on the table near the right arm with the right arm.", 
     }
     print("state:", request_data["state"])
