@@ -93,8 +93,10 @@ async def predict(request: InferenceRequest):
         )
         robot_action = make_robot_action(action_values, features)
         logging.warning(f"[act] Predicted action: {robot_action}")
+        list_of_actions = [list(robot_action.values())]
+        logging.warning(f"[act] list_of_actions: {list_of_actions}")
         result = {
-                "action": robot_action,
+                "action": list_of_actions,
             }
         return InferenceResponse(status=0, result=result, message="success")
     except Exception as e:
