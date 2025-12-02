@@ -64,7 +64,7 @@ def main():
     logging.warning(f"[INFO] POST -> {args.url}")
     response = requests.post(args.url, json=request_data, headers=headers)
     time_2 = time.time()
-    logging.warning(f"[time] 预处理: {time_1 - start:.4f}s, 推理: {time_2 - time_1:.4f}s, 总计: {time.time() - start:.4f}s")
+    logging.warning(f"[time] 预处理: {time_1 - start:.4f}s, 请求: {time_2 - time_1:.4f}s, 总计: {time.time() - start:.4f}s")
 
     # 5. 处理返回
     if response.status_code == 200:
