@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from PIL import Image
 from pathlib import Path
+import time
 from typing import Dict, Any, Optional
 
 import base64
@@ -64,6 +65,7 @@ def base64_to_pil(b64_str: str, target_size=(480, 640)):
     
 @app.post("/act", response_model=InferenceResponse)
 async def predict(request: InferenceRequest):
+    start = time.time()
     global policy, preprocessor, postprocessor, features, device, use_amp, robot_type
     if policy is None:
         raise HTTPException(status_code=500, detail="Policy not loaded")
@@ -81,6 +83,8 @@ async def predict(request: InferenceRequest):
         }
         
         task = request.prompt
+
+        time_1 = time.time()
         action_values = predict_action(
             observation=data,
             policy=policy,
@@ -91,13 +95,16 @@ async def predict(request: InferenceRequest):
             task=task,
             robot_type=robot_type,
         )
-        robot_action = make_robot_action(action_values, features)
-        logging.warning(f"[act] Predicted action: {robot_action}")
-        list_of_actions = [list(robot_action.values())]
-        logging.warning(f"[act] list_of_actions: {list_of_actions}")
+        time_2 = time.time()
+        logging.warning(f"[act] action_values: {action_values}")
+        # robot_action = make_robot_action(action_values, features)
+        # logging.warning(f"[act] Predicted action: {robot_action}")
+        # list_of_actions = [list(robot_action.values())]
+        # logging.warning(f"[act] list_of_actions: {list_of_actions}")
         result = {
-                "action": list_of_actions,
+                "action": action_values.tolist(),
             }
+        logging.warning(f"[time] 预处理: {time_1 - start:.4f}s, 推理: {time_2 - time_1:.4f}s, 总计: {time.time() - start:.4f}s")
         return InferenceResponse(status=0, result=result, message="success")
     except Exception as e:
         logging.exception(e)

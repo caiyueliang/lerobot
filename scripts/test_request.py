@@ -5,6 +5,7 @@
 import argparse
 import base64
 import requests
+import time
 import logging
 from pathlib import Path
 
@@ -42,6 +43,7 @@ def main():
     head_img_path = base_path + "head_00050.png"
     wrist_left_img_path = base_path + "wrist_r_00050.png"
 
+    start = time.time()
     # 2. 构造 JSON 请求体
     request_data = {
         "image": image_to_base64(head_img_path),
@@ -50,29 +52,32 @@ def main():
         "state": [0.13212, 0.35374, -0.23179, 0.854485, 0.9108667, 0.36893],
         "prompt": "Pick up the bowl on the table near the right arm with the right arm.", 
     }
-    print("state:", request_data["state"])
+    logging.warning(f"state: {request_data['state']}")
     
     # 3. 构造请求头
     headers = {"Content-Type": "application/json"}
     if args.token:
         headers["Authorization"] = f"{args.token}"
 
+    time_1 = time.time()
     # 4. 发送请求
-    print(f"[INFO] POST -> {args.url}")
+    logging.warning(f"[INFO] POST -> {args.url}")
     response = requests.post(args.url, json=request_data, headers=headers)
+    time_2 = time.time()
+    logging.warning(f"[time] 预处理: {time_1 - start:.4f}s, 推理: {time_2 - time_1:.4f}s, 总计: {time.time() - start:.4f}s")
 
     # 5. 处理返回
     if response.status_code == 200:
         result = response.json()
-        print("response:", result)
+        logging.warning(f"response: {result}")
 
         if result["status"] == 0:
-            print("Action:", result["result"]["action"])
+            logging.warning(f"Action: {result['result']['action']}")
         else:
-            print("Error message:", result)
+            logging.warning(f"Error message: {result}")
     else:
-        print("Error Code: ", response.status_code)
-        print("Error:", response.json())
+        logging.warning(f"Error Code: {response.status_code}")
+        logging.warning(f"Error: {response.json()}")
 
 if __name__ == "__main__":
     main()
