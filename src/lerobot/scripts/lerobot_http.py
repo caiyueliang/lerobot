@@ -220,9 +220,9 @@ def main():
         else:
             logging.warning("[main] 未提供 --policy-path，且环境变量 MODEL_PATH 未设置。")
     if args.dataset_repo_id is None:
-        args.dataset_repo_id = os.getenv("DATASET_REPO_ID")
+        args.dataset_repo_id = os.getenv("DATASET_PATH")
         if args.dataset_repo_id:
-            logging.warning(f"[main] 使用环境变量 DATASET_REPO_ID: {args.dataset_repo_id}")
+            logging.warning(f"[main] 使用环境变量 DATASET_PATH: {args.dataset_repo_id}")
         else:
             logging.warning("[main] 未提供 --dataset-repo-id，且环境变量 DATASET_REPO_ID 未设置。")
     args.host = os.getenv("HOST", args.host)

@@ -39,9 +39,12 @@ def main():
     args = parse_args()
 
     # 1. 本地图像路径（按需修改）
-    base_path = "./images/iros_clear_table_in_the_restaurant_20251028_111828/"
-    head_img_path = base_path + "head_00050.png"
-    wrist_left_img_path = base_path + "wrist_r_00050.png"
+    # base_path = "./images/iros_clear_table_in_the_restaurant_20251028_111828/"
+    # head_img_path = base_path + "head_00050.png"
+    # wrist_left_img_path = base_path + "wrist_r_00050.png"
+    base_path = "./images/sim_orange/"
+    head_img_path = base_path + "front_view.jpg"
+    wrist_left_img_path = base_path + "wrist_view.jpg"
 
     start = time.time()
     # 2. 构造 JSON 请求体
