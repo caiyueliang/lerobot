@@ -32,6 +32,7 @@ features = None
 device = None
 use_amp = False
 robot_type = ""
+args = None
 
 app = FastAPI(title="LeRobot Policy Inference Server")
 
@@ -66,7 +67,7 @@ def base64_to_pil(b64_str: str, target_size=(480, 640)):
 @app.post("/act", response_model=InferenceResponse)
 async def predict(request: InferenceRequest):
     start = time.time()
-    global policy, preprocessor, postprocessor, features, device, use_amp, robot_type
+    global policy, preprocessor, postprocessor, features, device, use_amp, robot_type, args
     if policy is None:
         raise HTTPException(status_code=500, detail="Policy not loaded")
 
@@ -76,16 +77,18 @@ async def predict(request: InferenceRequest):
         # if len(request.state) != states_len:
         #     return InferenceResponse(status=1, message=f"invalid state length, need size: (1 x {states_len})")
 
-        # data = {
-        #     "observation.images.fixed": base64_to_pil(request.image),
-        #     "observation.images.handeye": base64_to_pil(request.wrist_image),
-        #     "observation.state": np.array(request.state),
-        # }
-        data = {
-            "observation.images.front": base64_to_pil(request.image),
-            "observation.images.wrist": base64_to_pil(request.wrist_image),
-            "observation.state": np.array(request.state),
-        }
+        if args.policy == "Pi0.5":
+            data = {
+                "observation.images.front": base64_to_pil(request.image),
+                "observation.images.wrist": base64_to_pil(request.wrist_image),
+                "observation.state": np.array(request.state),
+            }
+        else:
+            data = {
+                "observation.images.fixed": base64_to_pil(request.image),
+                "observation.images.handeye": base64_to_pil(request.wrist_image),
+                "observation.state": np.array(request.state),
+            }
 
         task = request.prompt
 
@@ -209,7 +212,9 @@ def find_first_matching_dir(root_dir, required_file, required_dir=None):
     return None
 
 def main():
+    global args
     parser = argparse.ArgumentParser()
+    parser.add_argument("--policy", type=str, default=None)
     parser.add_argument("--policy-path", type=str, default=None, help="Path or HF repo ID of the pretrained policy")
     parser.add_argument("--dataset-repo-id", type=str, default=None, help="Optional: HuggingFace dataset repo to load metadata/features")
     parser.add_argument("--host", type=str, default="0.0.0.0")
@@ -218,6 +223,8 @@ def main():
 
 
     # 初始化
+    if args.policy is None:
+        args.policy = os.getenv("POLICY", None)
     if args.policy_path is None:
         args.policy_path = os.getenv("MODEL_PATH")
         if args.policy_path:
@@ -246,7 +253,7 @@ def main():
         logging.warning(f"[main] 目录: {args.policy_path} 中未找到 '{required_file}' 子文件夹，请检查模型路径。")
         exit(1)
 
-
+    logging.warning(f"[main] args: {args}")
     load_policy(args.policy_path, args.dataset_repo_id)
 
     import uvicorn
