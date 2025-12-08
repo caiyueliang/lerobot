@@ -8,4 +8,5 @@ COPY . .
 
 RUN ${PIP} install -e ".[pi]" -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
-CMD ["sleep", "3600000"]
+ENTRYPOINT []
+CMD ["bash", "-c", "source /root/miniconda3/bin/activate gr00t && python src/lerobot/scripts/lerobot_http.py"]

@@ -76,12 +76,17 @@ async def predict(request: InferenceRequest):
         # if len(request.state) != states_len:
         #     return InferenceResponse(status=1, message=f"invalid state length, need size: (1 x {states_len})")
 
+        # data = {
+        #     "observation.images.fixed": base64_to_pil(request.image),
+        #     "observation.images.handeye": base64_to_pil(request.wrist_image),
+        #     "observation.state": np.array(request.state),
+        # }
         data = {
-            "observation.images.fixed": base64_to_pil(request.image),
-            "observation.images.handeye": base64_to_pil(request.wrist_image),
+            "observation.images.front": base64_to_pil(request.image),
+            "observation.images.wrist": base64_to_pil(request.wrist_image),
             "observation.state": np.array(request.state),
         }
-        
+
         task = request.prompt
 
         time_1 = time.time()
@@ -224,7 +229,7 @@ def main():
         if args.dataset_repo_id:
             logging.warning(f"[main] 使用环境变量 DATASET_PATH: {args.dataset_repo_id}")
         else:
-            logging.warning("[main] 未提供 --dataset-repo-id，且环境变量 DATASET_REPO_ID 未设置。")
+            logging.warning("[main] 未提供 --dataset-repo-id，且环境变量 DATASET_PATH 未设置。")
     args.host = os.getenv("HOST", args.host)
     args.port = int(os.getenv("PORT", args.port))
 

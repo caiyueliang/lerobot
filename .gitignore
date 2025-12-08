@@ -165,7 +165,7 @@ wandb/
 
 # Data folders
 data/
-outputs/
+outputs*/
 
 # Translations
 *.mo
