@@ -190,9 +190,13 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     if not is_main_process:
         dataset = make_dataset(cfg)
 
+    # 兼容模式必须同时满足“策略是 PI0.5”和“用户显式打开开关”。默认 false 时，
+    # dataset_stats、batch 和后续预处理流程都与原训练方式完全一致。
     use_pi05_split_state_action = cfg.policy.type == "pi05" and getattr(
         cfg.policy, "use_split_state_action", False
     )
+    # PI0.5 会用 observation.state/action 的统计量做归一化。拆分数据集没有这两个
+    # 标准统计项，所以开关开启时在内存中按字段顺序生成；不会修改磁盘上的 stats.json。
     dataset_stats = (
         adapt_pi05_stats(dataset.meta.stats) if use_pi05_split_state_action else dataset.meta.stats
     )
@@ -335,6 +339,8 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         start_time = time.perf_counter()
         batch = next(dl_iter)
         if use_pi05_split_state_action:
+            # 必须在 preprocessor 之前拼接。preprocessor 会先把 batch 转成标准 transition，
+            # 未提前生成的 action.* 拆分字段不会被识别为 PI0.5 的训练目标。
             batch = adapt_pi05_batch(batch)
         batch = preprocessor(batch)
         train_tracker.dataloading_s = time.perf_counter() - start_time
