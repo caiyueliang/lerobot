@@ -51,6 +51,32 @@ def test_adapt_pi05_batch_concatenates_split_fields_in_robot_joint_order():
     )
 
 
+def test_adapt_pi05_batch_restores_squeezed_gripper_dimension():
+    batch = {
+        STATE_KEYS[0]: torch.full((2, 7), 1.0),
+        STATE_KEYS[1]: torch.full((2,), 2.0),
+        STATE_KEYS[2]: torch.full((2, 7), 3.0),
+        STATE_KEYS[3]: torch.full((2,), 4.0),
+        ACTION_KEYS[0]: torch.full((2, 3, 7), 5.0),
+        ACTION_KEYS[1]: torch.full((2, 3), 6.0),
+        ACTION_KEYS[2]: torch.full((2, 3, 7), 7.0),
+        ACTION_KEYS[3]: torch.full((2, 3), 8.0),
+    }
+
+    adapted = adapt_pi05_batch(batch)
+
+    assert adapted[OBS_STATE].shape == (2, 16)
+    assert adapted[ACTION].shape == (2, 3, 16)
+    torch.testing.assert_close(
+        adapted[OBS_STATE][0],
+        torch.tensor([1.0] * 7 + [2.0] + [3.0] * 7 + [4.0]),
+    )
+    torch.testing.assert_close(
+        adapted[ACTION][0, 0],
+        torch.tensor([5.0] * 7 + [6.0] + [7.0] * 7 + [8.0]),
+    )
+
+
 def test_adapt_pi05_batch_keeps_standard_fields_unchanged():
     state = torch.randn(2, 6)
     action = torch.randn(2, 3, 4)

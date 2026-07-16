@@ -30,7 +30,24 @@ def _concatenate_batch_fields(batch: dict[str, Any], keys: tuple[str, ...], targ
     if missing_keys:
         raise KeyError(f"Cannot build '{target_key}'. Missing dataset fields: {missing_keys}")
 
-    batch[target_key] = torch.cat([torch.as_tensor(batch[key]) for key in keys], dim=-1)
+    values = [torch.as_tensor(batch[key]) for key in keys]
+    max_ndim = max(value.ndim for value in values)
+    normalized_values = []
+    for key, value in zip(keys, values, strict=True):
+        if value.ndim == max_ndim - 1:
+            value = value.unsqueeze(-1)
+        elif value.ndim != max_ndim:
+            shapes = {
+                source_key: tuple(source_value.shape)
+                for source_key, source_value in zip(keys, values, strict=True)
+            }
+            raise ValueError(
+                f"Cannot build '{target_key}' from incompatible field shapes: {shapes}. "
+                f"Field '{key}' has {value.ndim} dimensions, expected {max_ndim} or {max_ndim - 1}."
+            )
+        normalized_values.append(value)
+
+    batch[target_key] = torch.cat(normalized_values, dim=-1)
 
 
 def adapt_pi05_batch(batch: dict[str, Any]) -> dict[str, Any]:
