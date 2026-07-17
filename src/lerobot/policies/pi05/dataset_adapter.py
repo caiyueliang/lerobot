@@ -15,24 +15,53 @@ import torch
 
 from lerobot.utils.constants import ACTION, OBS_STATE
 
-# 字段顺序就是最终向量中的维度顺序，不能随意调整。
-# 当前状态向量布局为：左臂 7 维 + 左夹爪 1 维 + 右臂 7 维 + 右夹爪 1 维，
-# 拼接后得到 PI0.5 使用的 16 维 ``observation.state``。
+# 字段块顺序必须与标准 16 维格式一致：左臂 7 维 + 右臂 7 维 + 左夹爪 1 维
+# + 右夹爪 1 维。最终生成的 ``observation.state`` 可以直接替代标准数据集中的同名字段。
 PI05_SPLIT_STATE_KEYS = (
     "observation.state.left_arm",
-    "observation.state.left_gripper",
     "observation.state.right_arm",
+    "observation.state.left_gripper",
     "observation.state.right_gripper",
 )
 
-# 动作字段必须和状态字段采用同样的身体部位顺序，确保模型看到的状态维度与需要预测的
-# 动作维度一一对应。拼接后得到 16 维 ``action``。
+# 动作字段使用与状态完全相同的身体部位顺序，保证 state/action 的每个维度语义对齐。
 PI05_SPLIT_ACTION_KEYS = (
     "action.left_arm",
-    "action.left_gripper",
     "action.right_arm",
+    "action.left_gripper",
     "action.right_gripper",
 )
+
+# 拆分数据集中的单臂原始顺序为：肩 Pitch、肩 Roll、肩 Yaw、肘、腕 Yaw、腕 Roll、腕 Pitch；
+# 标准数据集要求：肩 Pitch、肩 Roll、肩 Yaw、肘、腕 Roll、腕 Pitch、腕 Yaw。
+# 因此前四维保持不变，把原始索引 5、6 移到前面，原始索引 4 放到最后。
+PI05_STANDARD_ARM_JOINT_INDICES = (0, 1, 2, 3, 5, 6, 4)
+
+# 只有手臂字段需要执行关节内部重排，夹爪字段保持原值。
+PI05_SPLIT_ARM_KEYS = frozenset(
+    {
+        "observation.state.left_arm",
+        "observation.state.right_arm",
+        "action.left_arm",
+        "action.right_arm",
+    }
+)
+
+
+def _reorder_arm_joints(value: torch.Tensor, key: str) -> torch.Tensor:
+    """把拆分数据集的单臂关节顺序转换为标准数据集顺序。
+
+    状态张量可能是 ``[B, 7]``，动作张量可能是 ``[B, T, 7]``，因此始终只重排
+    最后一个特征维，batch 维和时间维不会发生变化。夹爪等非手臂字段直接原样返回。
+    """
+
+    if key not in PI05_SPLIT_ARM_KEYS:
+        return value
+    if value.shape[-1] != len(PI05_STANDARD_ARM_JOINT_INDICES):
+        raise ValueError(
+            f"Cannot reorder arm field '{key}': expected last dimension 7, got shape {tuple(value.shape)}"
+        )
+    return value[..., list(PI05_STANDARD_ARM_JOINT_INDICES)]
 
 
 def _concatenate_batch_fields(batch: dict[str, Any], keys: tuple[str, ...], target_key: str) -> None:
@@ -54,8 +83,8 @@ def _concatenate_batch_fields(batch: dict[str, Any], keys: tuple[str, ...], targ
         raise KeyError(f"Cannot build '{target_key}'. Missing dataset fields: {missing_keys}")
 
     # Dataset/DataLoader 返回值可能是 Tensor、NumPy 数组或 Python 数值，统一转为
-    # Tensor 后再处理，避免不同数据类型在拼接时产生额外分支。
-    values = [torch.as_tensor(batch[key]) for key in keys]
+    # Tensor。手臂字段在这里先完成关节内部重排，再参与后面的字段块拼接。
+    values = [_reorder_arm_joints(torch.as_tensor(batch[key]), key) for key in keys]
 
     # 以手臂字段的维数作为正常维数。夹爪字段只有一个数，经过数据加载后可能比手臂
     # 少最后一维，例如 ``[B]`` 对 ``[B, 7]``、``[B, T]`` 对 ``[B, T, 7]``。
@@ -129,9 +158,13 @@ def _concatenate_feature_stats(
             # 如果把四个 count 拼起来，会错误地产生一个 4 维 count。
             concatenated_stats[stat_name] = values[0].clone()
         else:
-            # q01/q99/mean/std/min/max 等都是逐特征维统计量，必须按照状态和动作的
-            # 固定字段顺序展开并拼接。
-            concatenated_stats[stat_name] = torch.cat([value.reshape(-1) for value in values])
+            # q01/q99/mean/std/min/max 等都是逐特征维统计量。它们必须先采用与 batch
+            # 完全相同的单臂关节重排，再按标准身体部位顺序拼接，否则归一化维度会错位。
+            reordered_values = [
+                _reorder_arm_joints(value.reshape(-1), key)
+                for key, value in zip(source_keys, values, strict=True)
+            ]
+            concatenated_stats[stat_name] = torch.cat(reordered_values)
     return concatenated_stats
 
 

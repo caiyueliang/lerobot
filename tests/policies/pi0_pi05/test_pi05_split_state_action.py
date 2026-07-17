@@ -12,30 +12,34 @@ from lerobot.utils.constants import ACTION, OBS_STATE
 
 STATE_KEYS = (
     "observation.state.left_arm",
-    "observation.state.left_gripper",
     "observation.state.right_arm",
+    "observation.state.left_gripper",
     "observation.state.right_gripper",
 )
 
 ACTION_KEYS = (
     "action.left_arm",
-    "action.left_gripper",
     "action.right_arm",
+    "action.left_gripper",
     "action.right_gripper",
 )
 
 
 def test_adapt_pi05_batch_concatenates_split_fields_in_robot_joint_order():
-    """验证未压缩的拆分字段能够按左臂、左夹爪、右臂、右夹爪顺序拼接。"""
+    """验证身体部位和单臂关节都按照标准 16 维格式排列。"""
+    left_state = torch.arange(7, dtype=torch.float32).repeat(2, 1)
+    right_state = torch.arange(10, 17, dtype=torch.float32).repeat(2, 1)
+    left_action = torch.arange(40, 47, dtype=torch.float32).repeat(2, 3, 1)
+    right_action = torch.arange(50, 57, dtype=torch.float32).repeat(2, 3, 1)
     batch = {
-        STATE_KEYS[0]: torch.full((2, 7), 1.0),
-        STATE_KEYS[1]: torch.full((2, 1), 2.0),
-        STATE_KEYS[2]: torch.full((2, 7), 3.0),
-        STATE_KEYS[3]: torch.full((2, 1), 4.0),
-        ACTION_KEYS[0]: torch.full((2, 3, 7), 5.0),
-        ACTION_KEYS[1]: torch.full((2, 3, 1), 6.0),
-        ACTION_KEYS[2]: torch.full((2, 3, 7), 7.0),
-        ACTION_KEYS[3]: torch.full((2, 3, 1), 8.0),
+        STATE_KEYS[0]: left_state,
+        STATE_KEYS[1]: right_state,
+        STATE_KEYS[2]: torch.full((2, 1), 20.0),
+        STATE_KEYS[3]: torch.full((2, 1), 30.0),
+        ACTION_KEYS[0]: left_action,
+        ACTION_KEYS[1]: right_action,
+        ACTION_KEYS[2]: torch.full((2, 3, 1), 60.0),
+        ACTION_KEYS[3]: torch.full((2, 3, 1), 70.0),
     }
 
     adapted = adapt_pi05_batch(batch)
@@ -44,11 +48,15 @@ def test_adapt_pi05_batch_concatenates_split_fields_in_robot_joint_order():
     assert adapted[ACTION].shape == (2, 3, 16)
     torch.testing.assert_close(
         adapted[OBS_STATE][0],
-        torch.tensor([1.0] * 7 + [2.0] + [3.0] * 7 + [4.0]),
+        torch.tensor(
+            [0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 4.0, 10.0, 11.0, 12.0, 13.0, 15.0, 16.0, 14.0, 20.0, 30.0]
+        ),
     )
     torch.testing.assert_close(
         adapted[ACTION][0, 0],
-        torch.tensor([5.0] * 7 + [6.0] + [7.0] * 7 + [8.0]),
+        torch.tensor(
+            [40.0, 41.0, 42.0, 43.0, 45.0, 46.0, 44.0, 50.0, 51.0, 52.0, 53.0, 55.0, 56.0, 54.0, 60.0, 70.0]
+        ),
     )
 
 
@@ -56,12 +64,12 @@ def test_adapt_pi05_batch_restores_squeezed_gripper_dimension():
     """验证 DataLoader 压缩夹爪末维后，适配器会补回该维度再拼接。"""
     batch = {
         STATE_KEYS[0]: torch.full((2, 7), 1.0),
-        STATE_KEYS[1]: torch.full((2,), 2.0),
-        STATE_KEYS[2]: torch.full((2, 7), 3.0),
+        STATE_KEYS[1]: torch.full((2, 7), 3.0),
+        STATE_KEYS[2]: torch.full((2,), 2.0),
         STATE_KEYS[3]: torch.full((2,), 4.0),
         ACTION_KEYS[0]: torch.full((2, 3, 7), 5.0),
-        ACTION_KEYS[1]: torch.full((2, 3), 6.0),
-        ACTION_KEYS[2]: torch.full((2, 3, 7), 7.0),
+        ACTION_KEYS[1]: torch.full((2, 3, 7), 7.0),
+        ACTION_KEYS[2]: torch.full((2, 3), 6.0),
         ACTION_KEYS[3]: torch.full((2, 3), 8.0),
     }
 
@@ -71,11 +79,11 @@ def test_adapt_pi05_batch_restores_squeezed_gripper_dimension():
     assert adapted[ACTION].shape == (2, 3, 16)
     torch.testing.assert_close(
         adapted[OBS_STATE][0],
-        torch.tensor([1.0] * 7 + [2.0] + [3.0] * 7 + [4.0]),
+        torch.tensor([1.0] * 7 + [3.0] * 7 + [2.0] + [4.0]),
     )
     torch.testing.assert_close(
         adapted[ACTION][0, 0],
-        torch.tensor([5.0] * 7 + [6.0] + [7.0] * 7 + [8.0]),
+        torch.tensor([5.0] * 7 + [7.0] * 7 + [6.0] + [8.0]),
     )
 
 
@@ -91,22 +99,49 @@ def test_adapt_pi05_batch_keeps_standard_fields_unchanged():
 
 
 def test_adapt_pi05_stats_concatenates_vector_stats_and_keeps_count_scalar():
-    """验证逐维统计量会拼接，而表示样本数的 count 仍保持单值。"""
-    stats = {}
-    for index, (state_key, action_key, width) in enumerate(
-        zip(STATE_KEYS, ACTION_KEYS, (7, 1, 7, 1), strict=True),
-        start=1,
-    ):
-        stats[state_key] = {
-            "q01": torch.full((width,), float(index)),
-            "q99": torch.full((width,), float(index + 10)),
+    """验证 stats 与 batch 使用相同的标准关节顺序，count 仍保持单值。"""
+    stats = {
+        STATE_KEYS[0]: {
+            "q01": torch.arange(7, dtype=torch.float32),
+            "q99": torch.arange(100, 107, dtype=torch.float32),
             "count": torch.tensor([100]),
-        }
-        stats[action_key] = {
-            "q01": torch.full((width,), float(index + 20)),
-            "q99": torch.full((width,), float(index + 30)),
+        },
+        STATE_KEYS[1]: {
+            "q01": torch.arange(10, 17, dtype=torch.float32),
+            "q99": torch.arange(110, 117, dtype=torch.float32),
             "count": torch.tensor([100]),
-        }
+        },
+        STATE_KEYS[2]: {
+            "q01": torch.tensor([20.0]),
+            "q99": torch.tensor([120.0]),
+            "count": torch.tensor([100]),
+        },
+        STATE_KEYS[3]: {
+            "q01": torch.tensor([30.0]),
+            "q99": torch.tensor([130.0]),
+            "count": torch.tensor([100]),
+        },
+        ACTION_KEYS[0]: {
+            "q01": torch.arange(40, 47, dtype=torch.float32),
+            "q99": torch.arange(140, 147, dtype=torch.float32),
+            "count": torch.tensor([100]),
+        },
+        ACTION_KEYS[1]: {
+            "q01": torch.arange(50, 57, dtype=torch.float32),
+            "q99": torch.arange(150, 157, dtype=torch.float32),
+            "count": torch.tensor([100]),
+        },
+        ACTION_KEYS[2]: {
+            "q01": torch.tensor([60.0]),
+            "q99": torch.tensor([160.0]),
+            "count": torch.tensor([100]),
+        },
+        ACTION_KEYS[3]: {
+            "q01": torch.tensor([70.0]),
+            "q99": torch.tensor([170.0]),
+            "count": torch.tensor([100]),
+        },
+    }
 
     adapted = adapt_pi05_stats(stats)
 
@@ -114,7 +149,32 @@ def test_adapt_pi05_stats_concatenates_vector_stats_and_keeps_count_scalar():
     assert adapted[ACTION]["q99"].shape == (16,)
     torch.testing.assert_close(
         adapted[OBS_STATE]["q01"],
-        torch.tensor([1.0] * 7 + [2.0] + [3.0] * 7 + [4.0]),
+        torch.tensor(
+            [0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 4.0, 10.0, 11.0, 12.0, 13.0, 15.0, 16.0, 14.0, 20.0, 30.0]
+        ),
+    )
+    torch.testing.assert_close(
+        adapted[ACTION]["q99"],
+        torch.tensor(
+            [
+                140.0,
+                141.0,
+                142.0,
+                143.0,
+                145.0,
+                146.0,
+                144.0,
+                150.0,
+                151.0,
+                152.0,
+                153.0,
+                155.0,
+                156.0,
+                154.0,
+                160.0,
+                170.0,
+            ]
+        ),
     )
     torch.testing.assert_close(adapted[ACTION]["count"], torch.tensor([100]))
     assert OBS_STATE not in stats
@@ -129,11 +189,11 @@ def test_pi05_split_state_action_is_opt_in_and_uses_16_dimensional_features():
     split_config = PI05Config(device="cpu", use_split_state_action=True)
     split_config.input_features = {
         key: PolicyFeature(type=FeatureType.STATE, shape=(width,))
-        for key, width in zip(STATE_KEYS, (7, 1, 7, 1), strict=True)
+        for key, width in zip(STATE_KEYS, (7, 7, 1, 1), strict=True)
     }
     split_config.output_features = {
         key: PolicyFeature(type=FeatureType.ACTION, shape=(width,))
-        for key, width in zip(ACTION_KEYS, (7, 1, 7, 1), strict=True)
+        for key, width in zip(ACTION_KEYS, (7, 7, 1, 1), strict=True)
     }
 
     split_config.validate_features()

@@ -135,7 +135,7 @@ class PI05Config(PreTrainedConfig):
                 )
 
             # 根据数据集元信息动态计算拼接后的真实维度。当前 G1 Dex1 为
-            # 7 + 1 + 7 + 1 = 16 维，但不在代码中硬编码 16，便于发现元信息变化。
+            # 7 + 7 + 1 + 1 = 16 维，但不在代码中硬编码 16，便于发现元信息变化。
             state_dim = sum(self.input_features[key].shape[-1] for key in PI05_SPLIT_STATE_KEYS)
             action_dim = sum(self.output_features[key].shape[-1] for key in PI05_SPLIT_ACTION_KEYS)
             # PI0.5 内部会把较短向量补零到 max_state_dim/max_action_dim，但不能接受
