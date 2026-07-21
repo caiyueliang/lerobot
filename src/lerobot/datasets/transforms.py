@@ -163,6 +163,18 @@ class ImageTransformConfig:
 
 
 @dataclass
+class RandomErasingConfig:
+    """CLI-friendly configuration for local random erasing augmentation."""
+
+    enable: bool = False
+    weight: float = 1.0
+    p: float = 0.1
+    scale: tuple[float, float] = (0.02, 0.08)
+    ratio: tuple[float, float] = (0.3, 3.3)
+    value: float | str = 0.0
+
+
+@dataclass
 class ImageTransformsConfig:
     """
     These transforms are all using standard torchvision.transforms.v2
@@ -179,6 +191,7 @@ class ImageTransformsConfig:
     # By default, transforms are applied in Torchvision's suggested order (shown below).
     # Set this to True to apply them in a random order.
     random_order: bool = False
+    random_erasing: RandomErasingConfig = field(default_factory=RandomErasingConfig)
     tfs: dict[str, ImageTransformConfig] = field(
         default_factory=lambda: {
             "brightness": ImageTransformConfig(
@@ -304,6 +317,15 @@ class ImageTransforms(Transform):
 
             self.transforms[tf_name] = make_transform_from_config(tf_cfg)
             self.weights.append(tf_cfg.weight)
+
+        if cfg.random_erasing.enable and cfg.random_erasing.weight > 0.0:
+            self.transforms["random_erasing"] = v2.RandomErasing(
+                p=cfg.random_erasing.p,
+                scale=cfg.random_erasing.scale,
+                ratio=cfg.random_erasing.ratio,
+                value=cfg.random_erasing.value,
+            )
+            self.weights.append(cfg.random_erasing.weight)
 
         n_subset = min(len(self.transforms), cfg.max_num_transforms)
         if n_subset == 0 or not cfg.enable:
