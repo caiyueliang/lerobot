@@ -16,7 +16,7 @@
 
 from dataclasses import dataclass, field
 
-from lerobot.datasets.transforms import ImageTransformsConfig
+from lerobot.datasets.transforms import CameraDropoutConfig, ImageTransformsConfig
 from lerobot.datasets.video_utils import get_safe_default_codec
 
 
@@ -31,6 +31,7 @@ class DatasetConfig:
     root: str | None = None
     episodes: list[int] | None = None
     image_transforms: ImageTransformsConfig = field(default_factory=ImageTransformsConfig)
+    camera_dropout: CameraDropoutConfig = field(default_factory=CameraDropoutConfig)
     revision: str | None = None
     use_imagenet_stats: bool = True
     video_backend: str = field(default_factory=get_safe_default_codec)

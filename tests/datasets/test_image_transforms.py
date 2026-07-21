@@ -242,6 +242,51 @@ def test_apply_camera_dropout_respects_eligible_camera_keys():
     assert torch.count_nonzero(output["observation.images.wrist_right"]) > 0
 
 
+def test_dataset_item_applies_camera_dropout_after_image_transforms():
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    dataset = object.__new__(LeRobotDataset)
+    dataset.image_transforms = lambda image: image + 1
+    dataset.camera_dropout = CameraDropoutConfig(
+        enable=True,
+        p=1.0,
+        max_num_cameras=1,
+        min_num_cameras_to_keep=1,
+        value=0.0,
+        eligible_camera_keys=["observation.images.head_stereo_left"],
+    )
+    dataset.delta_indices = None
+    dataset._ensure_hf_dataset_loaded = lambda: None
+    dataset._query_videos = lambda query_timestamps, ep_idx: {}
+    dataset._get_query_timestamps = lambda current_ts, query_indices: []
+    dataset.hf_dataset = [
+        {
+            "episode_index": torch.tensor(0),
+            "timestamp": torch.tensor(0.0),
+            "task_index": torch.tensor(0),
+            "observation.images.head_stereo_left": torch.ones(3, 4, 4),
+            "observation.images.head_stereo_right": torch.ones(3, 4, 4) * 2,
+        }
+    ]
+    dataset.meta = type(
+        "Meta",
+        (),
+        {
+            "video_keys": [],
+            "camera_keys": [
+                "observation.images.head_stereo_left",
+                "observation.images.head_stereo_right",
+            ],
+            "tasks": type("Tasks", (), {"iloc": {0: type("Task", (), {"name": "task"})()}})(),
+        },
+    )()
+
+    item = dataset[0]
+
+    assert torch.count_nonzero(item["observation.images.head_stereo_left"]) == 0
+    torch.testing.assert_close(item["observation.images.head_stereo_right"], torch.ones(3, 4, 4) * 3)
+
+
 def test_get_image_transforms_max_num_transforms(img_tensor_factory):
     img_tensor = img_tensor_factory()
     tf_cfg = ImageTransformsConfig(

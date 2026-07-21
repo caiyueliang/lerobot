@@ -105,6 +105,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
                 episodes=cfg.dataset.episodes,
                 delta_timestamps=delta_timestamps,
                 image_transforms=image_transforms,
+                camera_dropout=cfg.dataset.camera_dropout,
                 revision=cfg.dataset.revision,
                 video_backend=cfg.dataset.video_backend,
             )
@@ -115,6 +116,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
                 episodes=cfg.dataset.episodes,
                 delta_timestamps=delta_timestamps,
                 image_transforms=image_transforms,
+                camera_dropout=cfg.dataset.camera_dropout,
                 revision=cfg.dataset.revision,
                 max_num_shards=cfg.num_workers,
             )
@@ -125,6 +127,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
             # TODO(aliberts): add proper support for multi dataset
             # delta_timestamps=delta_timestamps,
             image_transforms=image_transforms,
+            camera_dropout=cfg.dataset.camera_dropout,
             video_backend=cfg.dataset.video_backend,
         )
         logging.info(
