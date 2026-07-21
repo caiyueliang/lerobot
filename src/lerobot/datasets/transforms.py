@@ -224,11 +224,6 @@ class ImageTransformsConfig:
                 type="RandomAffine",
                 kwargs={"degrees": (-5.0, 5.0), "translate": (0.05, 0.05)},
             ),
-            "random_erasing": ImageTransformConfig(
-                weight=0.0,
-                type="RandomErasing",
-                kwargs={"p": 0.1, "scale": (0.02, 0.08), "ratio": (0.3, 3.3), "value": 0.0},
-            ),
         }
     )
 

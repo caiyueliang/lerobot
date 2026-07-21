@@ -45,4 +45,4 @@ def test_dataset_config_mask_defaults_are_disabled():
 
     assert cfg.camera_dropout.enable is False
     assert cfg.image_transforms.random_erasing.enable is False
-    assert cfg.image_transforms.tfs["random_erasing"].weight == 0.0
+    assert "random_erasing" not in cfg.image_transforms.tfs

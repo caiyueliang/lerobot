@@ -229,6 +229,7 @@ LeRobot provides several transform types:
 
 - **`ColorJitter`**: Adjusts brightness, contrast, saturation, and hue
 - **`SharpnessJitter`**: Randomly adjusts image sharpness
+- **`RandomErasing`**: Randomly masks a rectangular image region
 - **`Identity`**: No transformation (useful for testing)
 
 You can also use any `torchvision.transforms.v2` transform by passing it directly to the `image_transforms` parameter.
@@ -240,6 +241,56 @@ You can also use any `torchvision.transforms.v2` transform by passing it directl
 - **`random_order`**: Apply transforms in random order vs. standard order (default: `False`)
 - **`weight`**: Sampling probability for each transform (higher = more likely, if sum of weights is not 1, they will be normalized)
 - **`kwargs`**: Transform-specific parameters (e.g., brightness range)
+
+### Mask 增强参数说明
+
+LeRobot 支持两类可选 Mask 增强，二者默认都不开启：
+
+- **局部区域 Mask**：通过 `dataset.image_transforms.random_erasing` 配置，使用 `torchvision.transforms.v2.RandomErasing` 对单张摄像头图片随机擦除一个矩形区域。
+- **整路摄像头 Mask**：通过 `dataset.camera_dropout` 配置，在一个训练样本中随机将某一路或某几路摄像头图像整体置为指定值。
+
+局部区域 Mask 常用参数：
+
+- `enable`：是否开启局部区域 Mask，默认 `false`。
+- `weight`：在 `RandomSubsetApply` 中采样该增强的权重。
+- `p`：对单张图片执行局部 Mask 的概率。
+- `scale`：Mask 区域面积占整张图片面积的比例范围，建议从 `[0.02, 0.08]` 或 `[0.02, 0.12]` 开始。
+- `ratio`：Mask 矩形宽高比范围，默认可使用 `[0.3, 3.3]`。
+- `value`：Mask 区域填充值。图片在 dataset 阶段通常为 `[0, 1]`，`0.0` 表示黑色区域，`"random"` 表示随机像素值。
+
+整路摄像头 Mask 常用参数：
+
+- `enable`：是否开启整路摄像头 Mask，默认 `false`。
+- `p`：对一个训练样本执行整路摄像头 Mask 的概率。
+- `max_num_cameras`：一次最多 Mask 掉几路摄像头。四路摄像头任务建议从 `1` 开始。
+- `min_num_cameras_to_keep`：每个样本至少保留几路摄像头。四路摄像头任务建议从 `3` 开始。
+- `value`：整路摄像头被 Mask 后的填充值。
+- `eligible_camera_keys`：允许被整路 Mask 的摄像头列表。未列入的摄像头不会被该增强 Mask。
+
+整路摄像头 Mask 不会把 PI0.5 的 `img_masks` 改成 `false`。它模拟的是图像内容被遮挡或不可用，而不是摄像头字段缺失。
+
+局部区域 Mask 命令行示例：
+
+```bash
+--dataset.image_transforms.enable=true \
+--dataset.image_transforms.random_erasing.enable=true \
+--dataset.image_transforms.random_erasing.weight=1.0 \
+--dataset.image_transforms.random_erasing.p=0.15 \
+--dataset.image_transforms.random_erasing.scale='[0.02,0.08]' \
+--dataset.image_transforms.random_erasing.ratio='[0.3,3.3]' \
+--dataset.image_transforms.random_erasing.value=0.0
+```
+
+整路摄像头 Mask 命令行示例：
+
+```bash
+--dataset.camera_dropout.enable=true \
+--dataset.camera_dropout.p=0.05 \
+--dataset.camera_dropout.max_num_cameras=1 \
+--dataset.camera_dropout.min_num_cameras_to_keep=3 \
+--dataset.camera_dropout.value=0.0 \
+--dataset.camera_dropout.eligible_camera_keys='["observation.images.head_stereo_left","observation.images.head_stereo_right","observation.images.wrist_left","observation.images.wrist_right"]'
+```
 
 ### Visualizing transforms
 
