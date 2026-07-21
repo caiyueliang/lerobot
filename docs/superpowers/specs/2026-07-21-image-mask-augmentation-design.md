@@ -27,7 +27,7 @@
 
 1. 在 `src/lerobot/datasets/transforms.py` 中扩展 `make_transform_from_config()`，支持 `torchvision.transforms.v2.RandomErasing`。
 2. 在 `ImageTransformsConfig.tfs` 的默认配置里预留 `random_erasing`，但默认 `weight=0.0`，因此不会参与随机采样。
-3. 新增整路摄像头 Mask 配置，例如 `CameraDropoutConfig`，挂在 `DatasetConfig` 或 `ImageTransformsConfig` 的相邻位置。
+3. 新增整路摄像头 Mask 配置 `CameraDropoutConfig`，挂在 `DatasetConfig.camera_dropout`，使其可以通过 `--dataset.camera_dropout.xxx=...` 形式从训练命令控制。
 4. 在 `LeRobotDataset.__getitem__()` 和 `StreamingLeRobotDataset` 的读取路径中，完成所有 camera image 加载和 per-image transforms 后，再对所有 camera keys 执行 camera dropout。
 
 ## 局部区域 Mask
@@ -61,6 +61,20 @@ dataset:
 
 局部区域 Mask 由现有 `RandomSubsetApply` 采样，因此每个 batch、每个 sample、每路 camera 的 Mask 位置都可以不同。
 
+训练命令示例：
+
+```bash
+--dataset.image_transforms.enable=true \
+--dataset.image_transforms.max_num_transforms=3 \
+--dataset.image_transforms.random_order=false \
+--dataset.image_transforms.tfs.random_erasing.weight=1.0 \
+--dataset.image_transforms.tfs.random_erasing.type=RandomErasing \
+--dataset.image_transforms.tfs.random_erasing.kwargs.p=0.15 \
+--dataset.image_transforms.tfs.random_erasing.kwargs.scale='[0.02,0.08]' \
+--dataset.image_transforms.tfs.random_erasing.kwargs.ratio='[0.3,3.3]' \
+--dataset.image_transforms.tfs.random_erasing.kwargs.value=0.0
+```
+
 ## 整路摄像头 Mask
 
 整路摄像头 Mask 用于模拟某一路摄像头失效、被遮挡或画面不可用。它不能放在当前 `ImageTransforms` 内，因为 `ImageTransforms` 每次只接收单路图片，不知道其它摄像头是否已经被 Mask，也无法保证最少保留几路摄像头。
@@ -92,6 +106,19 @@ dataset:
 - `eligible_camera_keys`：允许被整路 Mask 的摄像头列表。未列入的摄像头永远不会被该增强 Mask。
 
 默认配置中，整路摄像头 Mask 不开启。开启后，每个样本独立随机决策，batch 内不同样本可以 Mask 不同摄像头。采样时必须满足 `min_num_cameras_to_keep`，避免训练样本丢失过多视觉信息。
+
+训练命令示例：
+
+```bash
+--dataset.camera_dropout.enable=true \
+--dataset.camera_dropout.p=0.05 \
+--dataset.camera_dropout.max_num_cameras=1 \
+--dataset.camera_dropout.min_num_cameras_to_keep=3 \
+--dataset.camera_dropout.value=0.0 \
+--dataset.camera_dropout.eligible_camera_keys='["observation.images.head_stereo_left","observation.images.head_stereo_right","observation.images.wrist_left","observation.images.wrist_right"]'
+```
+
+完整训练命令可以只增加需要开启的 Mask 参数。两类 Mask 默认都关闭，因此不添加这些参数时，现有训练命令行为保持不变。
 
 ## 数据流
 
