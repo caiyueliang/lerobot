@@ -220,6 +220,60 @@ class ImageTransformsConfig:
     )
 
 
+@dataclass
+class CameraDropoutConfig:
+    """Configuration for masking complete camera image tensors during dataset reads."""
+
+    enable: bool = False
+    p: float = 0.05
+    max_num_cameras: int = 1
+    min_num_cameras_to_keep: int = 3
+    value: float | str = 0.0
+    eligible_camera_keys: list[str] | None = None
+
+
+def _make_camera_dropout_value(image: torch.Tensor, value: float | str) -> torch.Tensor:
+    if value == "random":
+        return torch.rand_like(image)
+    if isinstance(value, (int, float)):
+        return torch.full_like(image, float(value))
+    raise ValueError(f"Camera dropout value must be a number or 'random', got {value!r}.")
+
+
+def apply_camera_dropout(
+    item: dict[str, Any],
+    camera_keys: Sequence[str],
+    cfg: CameraDropoutConfig,
+) -> dict[str, Any]:
+    if not cfg.enable or cfg.p <= 0.0 or cfg.max_num_cameras <= 0:
+        return item
+    if torch.rand(()) >= cfg.p:
+        return item
+
+    present_camera_keys = [key for key in camera_keys if key in item]
+    eligible = list(cfg.eligible_camera_keys) if cfg.eligible_camera_keys else list(camera_keys)
+    available_keys = [key for key in eligible if key in present_camera_keys]
+    if not available_keys:
+        return item
+
+    max_allowed = len(present_camera_keys) - cfg.min_num_cameras_to_keep
+    num_to_mask = min(cfg.max_num_cameras, len(available_keys), max_allowed)
+    if num_to_mask <= 0:
+        return item
+
+    selected_indices = torch.randperm(len(available_keys))[:num_to_mask]
+    selected_keys = [available_keys[i] for i in selected_indices.tolist()]
+
+    output = dict(item)
+    for key in selected_keys:
+        image = output[key]
+        if not isinstance(image, torch.Tensor):
+            continue
+        output[key] = _make_camera_dropout_value(image, cfg.value)
+
+    return output
+
+
 def make_transform_from_config(cfg: ImageTransformConfig):
     if cfg.type == "Identity":
         return v2.Identity(**cfg.kwargs)
