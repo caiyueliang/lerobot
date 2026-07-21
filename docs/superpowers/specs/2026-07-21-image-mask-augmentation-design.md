@@ -67,12 +67,12 @@ dataset:
 --dataset.image_transforms.enable=true \
 --dataset.image_transforms.max_num_transforms=3 \
 --dataset.image_transforms.random_order=false \
---dataset.image_transforms.tfs.random_erasing.weight=1.0 \
---dataset.image_transforms.tfs.random_erasing.type=RandomErasing \
---dataset.image_transforms.tfs.random_erasing.kwargs.p=0.15 \
---dataset.image_transforms.tfs.random_erasing.kwargs.scale='[0.02,0.08]' \
---dataset.image_transforms.tfs.random_erasing.kwargs.ratio='[0.3,3.3]' \
---dataset.image_transforms.tfs.random_erasing.kwargs.value=0.0
+--dataset.image_transforms.random_erasing.enable=true \
+--dataset.image_transforms.random_erasing.weight=1.0 \
+--dataset.image_transforms.random_erasing.p=0.15 \
+--dataset.image_transforms.random_erasing.scale='[0.02,0.08]' \
+--dataset.image_transforms.random_erasing.ratio='[0.3,3.3]' \
+--dataset.image_transforms.random_erasing.value=0.0
 ```
 
 ## 整路摄像头 Mask

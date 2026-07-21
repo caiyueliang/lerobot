@@ -538,7 +538,7 @@ git commit -m "feat: wire camera dropout through datasets"
 
 **Interfaces:**
 - Consumes: `DatasetConfig.camera_dropout`.
-- Produces: CLI-compatible nested parameters for `dataset.camera_dropout` and `dataset.image_transforms.tfs.random_erasing.kwargs`.
+- Produces: CLI-compatible nested parameters for `dataset.camera_dropout` and `dataset.image_transforms.random_erasing`.
 
 - [ ] **Step 1: Write a failing draccus parse test**
 
@@ -556,12 +556,12 @@ def test_dataset_config_parses_mask_augmentation_cli_flags():
         args=[
             "--repo_id=/tmp/example",
             "--image_transforms.enable=true",
-            "--image_transforms.tfs.random_erasing.weight=1.0",
-            "--image_transforms.tfs.random_erasing.type=RandomErasing",
-            "--image_transforms.tfs.random_erasing.kwargs.p=0.15",
-            "--image_transforms.tfs.random_erasing.kwargs.scale=[0.02,0.08]",
-            "--image_transforms.tfs.random_erasing.kwargs.ratio=[0.3,3.3]",
-            "--image_transforms.tfs.random_erasing.kwargs.value=0.0",
+            "--image_transforms.random_erasing.enable=true",
+            "--image_transforms.random_erasing.weight=1.0",
+            "--image_transforms.random_erasing.p=0.15",
+            "--image_transforms.random_erasing.scale=[0.02,0.08]",
+            "--image_transforms.random_erasing.ratio=[0.3,3.3]",
+            "--image_transforms.random_erasing.value=0.0",
             "--camera_dropout.enable=true",
             "--camera_dropout.p=0.05",
             "--camera_dropout.max_num_cameras=1",
@@ -647,7 +647,7 @@ In `docs/source/lerobot-dataset-v3.mdx`, add this subsection after the existing 
 
 LeRobot 支持两类可选 Mask 增强，二者默认都不开启：
 
-- **局部区域 Mask**：通过 `dataset.image_transforms.tfs.random_erasing` 配置，使用 `torchvision.transforms.v2.RandomErasing` 对单张摄像头图片随机擦除一个矩形区域。
+- **局部区域 Mask**：通过 `dataset.image_transforms.random_erasing` 配置，使用 `torchvision.transforms.v2.RandomErasing` 对单张摄像头图片随机擦除一个矩形区域。
 - **整路摄像头 Mask**：通过 `dataset.camera_dropout` 配置，在一个训练样本中随机将某一路或某几路摄像头图像整体置为指定值。
 
 局部区域 Mask 常用参数：
@@ -678,12 +678,12 @@ Add this example below the parameter list:
 
 ```bash
 --dataset.image_transforms.enable=true \
---dataset.image_transforms.tfs.random_erasing.weight=1.0 \
---dataset.image_transforms.tfs.random_erasing.type=RandomErasing \
---dataset.image_transforms.tfs.random_erasing.kwargs.p=0.15 \
---dataset.image_transforms.tfs.random_erasing.kwargs.scale='[0.02,0.08]' \
---dataset.image_transforms.tfs.random_erasing.kwargs.ratio='[0.3,3.3]' \
---dataset.image_transforms.tfs.random_erasing.kwargs.value=0.0
+--dataset.image_transforms.random_erasing.enable=true \
+--dataset.image_transforms.random_erasing.weight=1.0 \
+--dataset.image_transforms.random_erasing.p=0.15 \
+--dataset.image_transforms.random_erasing.scale='[0.02,0.08]' \
+--dataset.image_transforms.random_erasing.ratio='[0.3,3.3]' \
+--dataset.image_transforms.random_erasing.value=0.0
 ```
 
 整路摄像头 Mask 命令行示例：
