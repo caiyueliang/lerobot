@@ -15,16 +15,23 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.configs.types import FeatureType, NormalizationMode, PolicyFeature
 from lerobot.optim.optimizers import AdamWConfig
 from lerobot.optim.schedulers import CosineDecayWithWarmupSchedulerConfig
+from lerobot.policies.pi05.dataset_adapter import PI05_SPLIT_ACTION_KEYS, PI05_SPLIT_STATE_KEYS
+from lerobot.utils.constants import ACTION, OBS_STATE
 
 
 @PreTrainedConfig.register_subclass("pi05")
 @dataclass
 class PI05Config(PreTrainedConfig):
+    # 数据集工厂通过该类变量识别需要按 action horizon 读取的拆分动作字段。
+    # ClassVar 不属于 dataclass 的命令行配置项，因此用户只需要控制下面的布尔开关。
+    split_action_keys: ClassVar[tuple[str, ...]] = PI05_SPLIT_ACTION_KEYS
+
     paligemma_variant: str = "gemma_2b"
     action_expert_variant: str = "gemma_300m"
     dtype: str = "float32"  # Options: "bfloat16", "float32"
@@ -36,6 +43,11 @@ class PI05Config(PreTrainedConfig):
     # Shorter state and action vectors will be padded to these dimensions
     max_state_dim: int = 32
     max_action_dim: int = 32
+
+    # 是否启用 G1 Dex1 拆分字段兼容模式，默认关闭以完整保留原来的训练方式。
+    # 命令行传入 ``--policy.use_split_state_action=true`` 后，训练流程才会把左右手臂、
+    # 左右夹爪拼成标准的 ``observation.state`` 和 ``action``。
+    use_split_state_action: bool = False
 
     # Flow matching parameters: see openpi `PI0Pytorch`
     num_inference_steps: int = 10
@@ -111,19 +123,50 @@ class PI05Config(PreTrainedConfig):
             )
             self.input_features[key] = empty_camera
 
-        if "observation.state" not in self.input_features:
+        if self.use_split_state_action:
+            # 开关打开时，先验证数据集元信息中是否同时存在四个状态字段和四个动作字段。
+            # 这里提前失败可以避免训练到第一个 batch 时才发现字段缺失。
+            missing_state_keys = [key for key in PI05_SPLIT_STATE_KEYS if key not in self.input_features]
+            missing_action_keys = [key for key in PI05_SPLIT_ACTION_KEYS if key not in self.output_features]
+            if missing_state_keys or missing_action_keys:
+                raise ValueError(
+                    "PI05 split state/action compatibility is enabled, but source features are missing. "
+                    f"Missing state features: {missing_state_keys}; missing action features: {missing_action_keys}"
+                )
+
+            # 根据数据集元信息动态计算拼接后的真实维度。当前 G1 Dex1 为
+            # 7 + 7 + 1 + 1 = 16 维，但不在代码中硬编码 16，便于发现元信息变化。
+            state_dim = sum(self.input_features[key].shape[-1] for key in PI05_SPLIT_STATE_KEYS)
+            action_dim = sum(self.output_features[key].shape[-1] for key in PI05_SPLIT_ACTION_KEYS)
+            # PI0.5 内部会把较短向量补零到 max_state_dim/max_action_dim，但不能接受
+            # 超过最大维度的输入，因此在创建模型前进行明确检查。
+            if state_dim > self.max_state_dim:
+                raise ValueError(
+                    f"Concatenated state dimension ({state_dim}) exceeds max_state_dim ({self.max_state_dim})"
+                )
+            if action_dim > self.max_action_dim:
+                raise ValueError(
+                    f"Concatenated action dimension ({action_dim}) exceeds max_action_dim ({self.max_action_dim})"
+                )
+
+            # 把动态计算出的标准字段定义写入 policy config。模型据此知道真实输出只有
+            # 16 维，内部补零到 32 维后，推理时仍会正确裁回真实动作维度。
+            self.input_features[OBS_STATE] = PolicyFeature(type=FeatureType.STATE, shape=(state_dim,))
+            self.output_features[ACTION] = PolicyFeature(type=FeatureType.ACTION, shape=(action_dim,))
+
+        if OBS_STATE not in self.input_features:
             state_feature = PolicyFeature(
                 type=FeatureType.STATE,
                 shape=(self.max_state_dim,),  # Padded to max_state_dim
             )
-            self.input_features["observation.state"] = state_feature
+            self.input_features[OBS_STATE] = state_feature
 
-        if "action" not in self.output_features:
+        if ACTION not in self.output_features:
             action_feature = PolicyFeature(
                 type=FeatureType.ACTION,
                 shape=(self.max_action_dim,),  # Padded to max_action_dim
             )
-            self.output_features["action"] = action_feature
+            self.output_features[ACTION] = action_feature
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(

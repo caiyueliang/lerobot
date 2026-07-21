@@ -54,10 +54,19 @@ def resolve_delta_timestamps(
             returns `None` if the resulting dict is empty.
     """
     delta_timestamps = {}
+    # 标准数据集只有名为 ``action`` 的字段需要读取未来动作序列。拆分字段模式下，
+    # ``action.left_arm`` 等四个源字段也必须读取相同的 action horizon；否则它们只包含
+    # 当前帧，拼接后形状会从预期的 ``[B, T, 16]`` 退化为 ``[B, 16]``。
+    # 开关关闭时保持空元组，不影响任何原有策略和标准数据集。
+    split_action_keys = (
+        getattr(cfg, "split_action_keys", ()) if getattr(cfg, "use_split_state_action", False) else ()
+    )
     for key in ds_meta.features:
         if key == REWARD and cfg.reward_delta_indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in cfg.reward_delta_indices]
-        if key == ACTION and cfg.action_delta_indices is not None:
+        # 拆分动作字段与标准 action 使用完全相同的时间索引，保证四个身体部位在每个
+        # 未来时间步上严格对齐。
+        if (key == ACTION or key in split_action_keys) and cfg.action_delta_indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in cfg.action_delta_indices]
         if key.startswith(OBS_PREFIX) and cfg.observation_delta_indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in cfg.observation_delta_indices]
