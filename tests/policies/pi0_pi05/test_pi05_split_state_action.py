@@ -25,8 +25,8 @@ ACTION_KEYS = (
 )
 
 
-def test_adapt_pi05_batch_concatenates_split_fields_in_robot_joint_order():
-    """验证身体部位和单臂关节都按照标准 16 维格式排列。"""
+def test_adapt_pi05_batch_concatenates_split_fields_without_reordering_arm_joints():
+    """验证只调整字段块顺序，左右手臂内部的 7 个关节保持数据集原始顺序。"""
     left_state = torch.arange(7, dtype=torch.float32).repeat(2, 1)
     right_state = torch.arange(10, 17, dtype=torch.float32).repeat(2, 1)
     left_action = torch.arange(40, 47, dtype=torch.float32).repeat(2, 3, 1)
@@ -49,13 +49,13 @@ def test_adapt_pi05_batch_concatenates_split_fields_in_robot_joint_order():
     torch.testing.assert_close(
         adapted[OBS_STATE][0],
         torch.tensor(
-            [0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 4.0, 10.0, 11.0, 12.0, 13.0, 15.0, 16.0, 14.0, 20.0, 30.0]
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 20.0, 30.0]
         ),
     )
     torch.testing.assert_close(
         adapted[ACTION][0, 0],
         torch.tensor(
-            [40.0, 41.0, 42.0, 43.0, 45.0, 46.0, 44.0, 50.0, 51.0, 52.0, 53.0, 55.0, 56.0, 54.0, 60.0, 70.0]
+            [40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 50.0, 51.0, 52.0, 53.0, 54.0, 55.0, 56.0, 60.0, 70.0]
         ),
     )
 
@@ -99,7 +99,7 @@ def test_adapt_pi05_batch_keeps_standard_fields_unchanged():
 
 
 def test_adapt_pi05_stats_concatenates_vector_stats_and_keeps_count_scalar():
-    """验证 stats 与 batch 使用相同的标准关节顺序，count 仍保持单值。"""
+    """验证 stats 与 batch 都只拼接字段块，不重排单臂内部关节，count 保持单值。"""
     stats = {
         STATE_KEYS[0]: {
             "q01": torch.arange(7, dtype=torch.float32),
@@ -150,7 +150,7 @@ def test_adapt_pi05_stats_concatenates_vector_stats_and_keeps_count_scalar():
     torch.testing.assert_close(
         adapted[OBS_STATE]["q01"],
         torch.tensor(
-            [0.0, 1.0, 2.0, 3.0, 5.0, 6.0, 4.0, 10.0, 11.0, 12.0, 13.0, 15.0, 16.0, 14.0, 20.0, 30.0]
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 20.0, 30.0]
         ),
     )
     torch.testing.assert_close(
@@ -161,16 +161,16 @@ def test_adapt_pi05_stats_concatenates_vector_stats_and_keeps_count_scalar():
                 141.0,
                 142.0,
                 143.0,
+                144.0,
                 145.0,
                 146.0,
-                144.0,
                 150.0,
                 151.0,
                 152.0,
                 153.0,
+                154.0,
                 155.0,
                 156.0,
-                154.0,
                 160.0,
                 170.0,
             ]
