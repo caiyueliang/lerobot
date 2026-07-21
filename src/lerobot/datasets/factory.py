@@ -77,6 +77,45 @@ def resolve_delta_timestamps(
     return delta_timestamps
 
 
+def log_image_augmentation_config(dataset_cfg) -> None:
+    image_cfg = dataset_cfg.image_transforms
+    random_erasing_cfg = image_cfg.random_erasing
+    camera_dropout_cfg = dataset_cfg.camera_dropout
+
+    active_tfs = {
+        name: {"weight": tf_cfg.weight, "type": tf_cfg.type, "kwargs": tf_cfg.kwargs}
+        for name, tf_cfg in image_cfg.tfs.items()
+        if tf_cfg.weight > 0.0
+    }
+
+    logging.info(
+        "Image transforms: enable=%s, max_num_transforms=%s, random_order=%s, active_tfs=%s",
+        image_cfg.enable,
+        image_cfg.max_num_transforms,
+        image_cfg.random_order,
+        active_tfs,
+    )
+    logging.info(
+        "Random erasing: enable=%s, weight=%s, p=%s, scale=%s, ratio=%s, value=%s",
+        random_erasing_cfg.enable,
+        random_erasing_cfg.weight,
+        random_erasing_cfg.p,
+        random_erasing_cfg.scale,
+        random_erasing_cfg.ratio,
+        random_erasing_cfg.value,
+    )
+    logging.info(
+        "Camera dropout: enable=%s, p=%s, max_num_cameras=%s, min_num_cameras_to_keep=%s, "
+        "value=%s, eligible_camera_keys=%s",
+        camera_dropout_cfg.enable,
+        camera_dropout_cfg.p,
+        camera_dropout_cfg.max_num_cameras,
+        camera_dropout_cfg.min_num_cameras_to_keep,
+        camera_dropout_cfg.value,
+        camera_dropout_cfg.eligible_camera_keys,
+    )
+
+
 def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDataset:
     """Handles the logic of setting up delta timestamps and image transforms before creating a dataset.
 
@@ -92,6 +131,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
     image_transforms = (
         ImageTransforms(cfg.dataset.image_transforms) if cfg.dataset.image_transforms.enable else None
     )
+    log_image_augmentation_config(cfg.dataset)
 
     if isinstance(cfg.dataset.repo_id, str):
         ds_meta = LeRobotDatasetMetadata(
