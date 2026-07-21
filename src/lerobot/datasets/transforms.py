@@ -164,13 +164,26 @@ class ImageTransformConfig:
 
 @dataclass
 class RandomErasingConfig:
-    """CLI-friendly configuration for local random erasing augmentation."""
+    """
+    局部区域 Mask 的命令行友好配置。
 
+    这里不把 RandomErasing 放进默认的 `tfs` 字典里，原因是 `tfs` 主要服务于已有的
+    ColorJitter/SharpnessJitter 等“参数都是范围二元组”的增强；可视化脚本也会按这个假设
+    遍历 `tfs`。RandomErasing 同时包含概率、面积范围、宽高比和值，单独建 dataclass
+    可以让训练命令使用 `--dataset.image_transforms.random_erasing.xxx=...` 这种稳定路径。
+    """
+
+    # 总开关。默认关闭，避免现有训练命令在未显式指定时改变数据分布。
     enable: bool = False
+    # 参与 RandomSubsetApply 采样时的权重；只有 enable=True 且 weight>0 时才会加入增强池。
     weight: float = 1.0
+    # 对单张图片实际执行擦除的概率。即使该增强被采样到，RandomErasing 内部也会再按 p 判定。
     p: float = 0.1
+    # 被擦除矩形区域占整张图片面积的比例范围。默认较保守，降低遮掉关键目标的概率。
     scale: tuple[float, float] = (0.02, 0.08)
+    # 被擦除矩形的宽高比范围，沿用 torchvision RandomErasing 的常见默认范围。
     ratio: tuple[float, float] = (0.3, 3.3)
+    # 被擦除区域的填充值。图片在 dataset 阶段通常是 [0, 1]，0.0 表示黑块，"random" 表示随机值。
     value: float | str = 0.0
 
 
@@ -191,6 +204,7 @@ class ImageTransformsConfig:
     # By default, transforms are applied in Torchvision's suggested order (shown below).
     # Set this to True to apply them in a random order.
     random_order: bool = False
+    # 局部区域 Mask 的显式配置入口。它默认关闭，但可以通过命令行单独控制 p/scale/ratio/value。
     random_erasing: RandomErasingConfig = field(default_factory=RandomErasingConfig)
     tfs: dict[str, ImageTransformConfig] = field(
         default_factory=lambda: {
@@ -230,17 +244,31 @@ class ImageTransformsConfig:
 
 @dataclass
 class CameraDropoutConfig:
-    """Configuration for masking complete camera image tensors during dataset reads."""
+    """
+    整路摄像头 Mask 的配置。
 
+    这个增强必须在 dataset 层做，而不是放进 `ImageTransforms`，因为单图 transform 每次只能
+    看到一路 camera tensor，无法知道同一个样本里还有哪些摄像头，也就无法保证“至少保留几路”
+    或“最多 Mask 几路”。dataset 层已经拿到了 `meta.camera_keys` 和样本中的所有图像，适合
+    在每个样本上统一随机选择整路摄像头进行 Mask。
+    """
+
+    # 总开关。默认关闭，保证旧训练命令完全不受影响。
     enable: bool = False
+    # 对一个训练样本执行整路摄像头 Mask 的概率。
     p: float = 0.05
+    # 单个样本里最多 Mask 掉几路摄像头。四路相机任务默认建议保持为 1。
     max_num_cameras: int = 1
+    # 单个样本至少保留几路摄像头，防止一次 Mask 太多导致训练信号过弱。
     min_num_cameras_to_keep: int = 3
+    # 整路摄像头被 Mask 后的填充值；支持数字和 "random"。
     value: float | str = 0.0
+    # 允许被 Mask 的摄像头 key。为 None 时表示当前样本中所有 camera key 都有资格参与随机选择。
     eligible_camera_keys: list[str] | None = None
 
 
 def _make_camera_dropout_value(image: torch.Tensor, value: float | str) -> torch.Tensor:
+    """根据配置生成和原图同形状、同 dtype/device 的整路 Mask 图像。"""
     if value == "random":
         return torch.rand_like(image)
     if isinstance(value, (int, float)):
@@ -253,28 +281,44 @@ def apply_camera_dropout(
     camera_keys: Sequence[str],
     cfg: CameraDropoutConfig,
 ) -> dict[str, Any]:
+    """
+    对一个 dataset 样本执行整路摄像头 Mask。
+
+    返回值保持 LeRobotDataset item 的字典结构不变，只替换被选中 camera key 对应的 tensor。
+    注意这里不修改 PI0.5 后续生成的 `img_masks`：整路 camera dropout 模拟的是“图像内容被遮挡
+    或不可用”，不是“这个摄像头字段从 batch 中消失”。如果字段真的缺失，PI0.5 现有预处理逻辑
+    会自己把对应 `img_masks` 置为 false。
+    """
+    # 快速退出路径保持原 item 对象，避免默认关闭时引入额外拷贝成本。
     if not cfg.enable or cfg.p <= 0.0 or cfg.max_num_cameras <= 0:
         return item
+    # 对每个样本独立抽样，因此同一个 batch 中不同样本可能 Mask 不同摄像头。
     if torch.rand(()) >= cfg.p:
         return item
 
+    # 只在样本实际存在的 camera key 中选择；有些数据集或策略可能只提供部分相机。
     present_camera_keys = [key for key in camera_keys if key in item]
     eligible = list(cfg.eligible_camera_keys) if cfg.eligible_camera_keys else list(camera_keys)
     available_keys = [key for key in eligible if key in present_camera_keys]
     if not available_keys:
         return item
 
+    # min_num_cameras_to_keep 按样本中“实际存在的全部 camera 数量”计算，而不是按 eligible 子集计算。
+    # 这样可以支持“只允许 wrist_left 被 Mask，但仍要求四路相机至少保留三路”的用法。
     max_allowed = len(present_camera_keys) - cfg.min_num_cameras_to_keep
     num_to_mask = min(cfg.max_num_cameras, len(available_keys), max_allowed)
     if num_to_mask <= 0:
         return item
 
+    # 使用 torch 随机数，和现有图像增强一样受 torch seed/seeded_context 控制。
     selected_indices = torch.randperm(len(available_keys))[:num_to_mask]
     selected_keys = [available_keys[i] for i in selected_indices.tolist()]
 
+    # 只在真正需要替换图片时浅拷贝字典，未被 Mask 的字段继续复用原对象。
     output = dict(item)
     for key in selected_keys:
         image = output[key]
+        # 防御式处理：camera key 正常应为 Tensor；如果调用方传入非 Tensor，则跳过该 key。
         if not isinstance(image, torch.Tensor):
             continue
         output[key] = _make_camera_dropout_value(image, cfg.value)
@@ -313,6 +357,8 @@ class ImageTransforms(Transform):
             self.transforms[tf_name] = make_transform_from_config(tf_cfg)
             self.weights.append(tf_cfg.weight)
 
+        # RandomErasing 作为独立显式配置接入，方便 CLI 调参，也避免默认 `tfs` 遍历逻辑误处理
+        # `p/value` 这类不是范围二元组的参数。
         if cfg.random_erasing.enable and cfg.random_erasing.weight > 0.0:
             self.transforms["random_erasing"] = v2.RandomErasing(
                 p=cfg.random_erasing.p,

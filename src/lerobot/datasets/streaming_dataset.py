@@ -343,6 +343,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
                 for cam in image_keys:
                     video_frames[cam] = self.image_transforms(video_frames[cam])
 
+            # 与普通 LeRobotDataset 保持一致：先完成单图增强，再在样本级别随机 Mask 整路摄像头。
             video_frames = apply_camera_dropout(video_frames, self.meta.camera_keys, self.camera_dropout)
 
             updates.append(video_frames)

@@ -1023,6 +1023,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             for cam in image_keys:
                 item[cam] = self.image_transforms(item[cam])
 
+        # 整路摄像头 Mask 必须在所有 camera image 都已经读出、且单图增强执行完之后做。
+        # 这样它可以基于同一个样本里的全部 camera key 统一抽样，并保证至少保留指定数量的摄像头。
         item = apply_camera_dropout(item, self.meta.camera_keys, self.camera_dropout)
 
         # Add task as a string

@@ -31,6 +31,7 @@ class DatasetConfig:
     root: str | None = None
     episodes: list[int] | None = None
     image_transforms: ImageTransformsConfig = field(default_factory=ImageTransformsConfig)
+    # 整路摄像头 Mask 的 dataset 级配置。默认关闭；训练时可用 --dataset.camera_dropout.xxx 调参。
     camera_dropout: CameraDropoutConfig = field(default_factory=CameraDropoutConfig)
     revision: str | None = None
     use_imagenet_stats: bool = True
