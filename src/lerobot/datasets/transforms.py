@@ -211,6 +211,11 @@ class ImageTransformsConfig:
                 type="RandomAffine",
                 kwargs={"degrees": (-5.0, 5.0), "translate": (0.05, 0.05)},
             ),
+            "random_erasing": ImageTransformConfig(
+                weight=0.0,
+                type="RandomErasing",
+                kwargs={"p": 0.1, "scale": (0.02, 0.08), "ratio": (0.3, 3.3), "value": 0.0},
+            ),
         }
     )
 
@@ -224,6 +229,8 @@ def make_transform_from_config(cfg: ImageTransformConfig):
         return SharpnessJitter(**cfg.kwargs)
     elif cfg.type == "RandomAffine":
         return v2.RandomAffine(**cfg.kwargs)
+    elif cfg.type == "RandomErasing":
+        return v2.RandomErasing(**cfg.kwargs)
     else:
         raise ValueError(f"Transform '{cfg.type}' is not valid.")
 

@@ -153,6 +153,27 @@ def test_get_image_transforms_affine(img_tensor_factory, degrees, translate):
     assert isinstance(tf.transforms["affine"], v2.RandomAffine)
 
 
+def test_get_image_transforms_random_erasing(img_tensor_factory):
+    img_tensor = img_tensor_factory()
+    tf_cfg = ImageTransformsConfig(
+        enable=True,
+        tfs={
+            "random_erasing": ImageTransformConfig(
+                type="RandomErasing",
+                kwargs={"p": 1.0, "scale": (0.2, 0.2), "ratio": (1.0, 1.0), "value": 0.0},
+            )
+        },
+    )
+
+    tf = ImageTransforms(tf_cfg)
+    output = tf(img_tensor)
+
+    assert output.shape == img_tensor.shape
+    assert isinstance(tf.transforms["random_erasing"], v2.RandomErasing)
+    with pytest.raises(AssertionError):
+        torch.testing.assert_close(output, img_tensor)
+
+
 def test_get_image_transforms_max_num_transforms(img_tensor_factory):
     img_tensor = img_tensor_factory()
     tf_cfg = ImageTransformsConfig(
