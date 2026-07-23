@@ -22,6 +22,7 @@ import torch
 from datasets import load_dataset
 
 from lerobot.datasets.lerobot_dataset import CODEBASE_VERSION, LeRobotDatasetMetadata
+from lerobot.datasets.transforms import CameraDropoutConfig, apply_camera_dropout
 from lerobot.datasets.utils import (
     Backtrackable,
     LookAheadError,
@@ -84,6 +85,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         root: str | Path | None = None,
         episodes: list[int] | None = None,
         image_transforms: Callable | None = None,
+        camera_dropout: CameraDropoutConfig | None = None,
         delta_timestamps: dict[list[float]] | None = None,
         tolerance_s: float = 1e-4,
         revision: str | None = None,
@@ -119,6 +121,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         self.streaming_from_local = root is not None
 
         self.image_transforms = image_transforms
+        self.camera_dropout = camera_dropout or CameraDropoutConfig()
         self.episodes = episodes
         self.tolerance_s = tolerance_s
         self.revision = revision if revision else CODEBASE_VERSION
@@ -339,6 +342,9 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
                 image_keys = self.meta.camera_keys
                 for cam in image_keys:
                     video_frames[cam] = self.image_transforms(video_frames[cam])
+
+            # 与普通 LeRobotDataset 保持一致：先完成单图增强，再在样本级别随机 Mask 整路摄像头。
+            video_frames = apply_camera_dropout(video_frames, self.meta.camera_keys, self.camera_dropout)
 
             updates.append(video_frames)
 

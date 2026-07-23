@@ -34,6 +34,7 @@ from huggingface_hub.errors import RevisionNotFoundError
 
 from lerobot.datasets.compute_stats import aggregate_stats, compute_episode_stats
 from lerobot.datasets.image_writer import AsyncImageWriter, write_image
+from lerobot.datasets.transforms import CameraDropoutConfig, apply_camera_dropout
 from lerobot.datasets.utils import (
     DEFAULT_EPISODES_PATH,
     DEFAULT_FEATURES,
@@ -546,6 +547,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         root: str | Path | None = None,
         episodes: list[int] | None = None,
         image_transforms: Callable | None = None,
+        camera_dropout: CameraDropoutConfig | None = None,
         delta_timestamps: dict[str, list[float]] | None = None,
         tolerance_s: float = 1e-4,
         revision: str | None = None,
@@ -670,6 +672,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.repo_id = repo_id
         self.root = Path(root) if root else HF_LEROBOT_HOME / repo_id
         self.image_transforms = image_transforms
+        self.camera_dropout = camera_dropout or CameraDropoutConfig()
         self.delta_timestamps = delta_timestamps
         self.episodes = episodes
         self.tolerance_s = tolerance_s
@@ -1019,6 +1022,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
             image_keys = self.meta.camera_keys
             for cam in image_keys:
                 item[cam] = self.image_transforms(item[cam])
+
+        # 整路摄像头 Mask 必须在所有 camera image 都已经读出、且单图增强执行完之后做。
+        # 这样它可以基于同一个样本里的全部 camera key 统一抽样，并保证至少保留指定数量的摄像头。
+        item = apply_camera_dropout(item, self.meta.camera_keys, self.camera_dropout)
 
         # Add task as a string
         task_idx = item["task_index"].item()
@@ -1496,6 +1503,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.episodes = None
         obj.hf_dataset = obj.create_hf_dataset()
         obj.image_transforms = None
+        obj.camera_dropout = CameraDropoutConfig()
         obj.delta_timestamps = None
         obj.delta_indices = None
         obj.video_backend = video_backend if video_backend is not None else get_safe_default_codec()
@@ -1522,6 +1530,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         root: str | Path | None = None,
         episodes: dict | None = None,
         image_transforms: Callable | None = None,
+        camera_dropout: CameraDropoutConfig | None = None,
         delta_timestamps: dict[str, list[float]] | None = None,
         tolerances_s: dict | None = None,
         download_videos: bool = True,
@@ -1539,6 +1548,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
                 root=self.root / repo_id,
                 episodes=episodes[repo_id] if episodes else None,
                 image_transforms=image_transforms,
+                camera_dropout=camera_dropout,
                 delta_timestamps=delta_timestamps,
                 tolerance_s=self.tolerances_s[repo_id],
                 download_videos=download_videos,
@@ -1568,6 +1578,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
             self.disabled_features.update(extra_keys)
 
         self.image_transforms = image_transforms
+        self.camera_dropout = camera_dropout or CameraDropoutConfig()
         self.delta_timestamps = delta_timestamps
         # TODO(rcadene, aliberts): We should not perform this aggregation for datasets
         # with multiple robots of different ranges. Instead we should have one normalization

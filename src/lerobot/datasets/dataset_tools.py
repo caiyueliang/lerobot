@@ -131,6 +131,7 @@ def delete_episodes(
         repo_id=repo_id,
         root=output_dir,
         image_transforms=dataset.image_transforms,
+        camera_dropout=dataset.camera_dropout,
         delta_timestamps=dataset.delta_timestamps,
         tolerance_s=dataset.tolerance_s,
     )
@@ -221,6 +222,7 @@ def split_dataset(
             repo_id=split_repo_id,
             root=split_output_dir,
             image_transforms=dataset.image_transforms,
+            camera_dropout=dataset.camera_dropout,
             delta_timestamps=dataset.delta_timestamps,
             tolerance_s=dataset.tolerance_s,
         )
@@ -263,6 +265,7 @@ def merge_datasets(
         repo_id=output_repo_id,
         root=output_dir,
         image_transforms=datasets[0].image_transforms,
+        camera_dropout=datasets[0].camera_dropout,
         delta_timestamps=datasets[0].delta_timestamps,
         tolerance_s=datasets[0].tolerance_s,
     )
@@ -367,6 +370,7 @@ def modify_features(
         repo_id=repo_id,
         root=output_dir,
         image_transforms=dataset.image_transforms,
+        camera_dropout=dataset.camera_dropout,
         delta_timestamps=dataset.delta_timestamps,
         tolerance_s=dataset.tolerance_s,
     )

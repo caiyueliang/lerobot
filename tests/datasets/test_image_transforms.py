@@ -22,11 +22,14 @@ from torchvision.transforms import v2
 from torchvision.transforms.v2 import functional as F  # noqa: N812
 
 from lerobot.datasets.transforms import (
+    CameraDropoutConfig,
     ImageTransformConfig,
     ImageTransforms,
     ImageTransformsConfig,
+    RandomErasingConfig,
     RandomSubsetApply,
     SharpnessJitter,
+    apply_camera_dropout,
     make_transform_from_config,
 )
 from lerobot.scripts.lerobot_imgtransform_viz import (
@@ -151,6 +154,160 @@ def test_get_image_transforms_affine(img_tensor_factory, degrees, translate):
     assert output.shape == img_tensor.shape
     # Verify transform is type RandomAffine
     assert isinstance(tf.transforms["affine"], v2.RandomAffine)
+
+
+def test_get_image_transforms_random_erasing(img_tensor_factory):
+    img_tensor = img_tensor_factory()
+    tf_cfg = ImageTransformsConfig(
+        enable=True,
+        tfs={
+            "random_erasing": ImageTransformConfig(
+                type="RandomErasing",
+                kwargs={"p": 1.0, "scale": (0.2, 0.2), "ratio": (1.0, 1.0), "value": 0.0},
+            )
+        },
+    )
+
+    tf = ImageTransforms(tf_cfg)
+    output = tf(img_tensor)
+
+    assert output.shape == img_tensor.shape
+    assert isinstance(tf.transforms["random_erasing"], v2.RandomErasing)
+    with pytest.raises(AssertionError):
+        torch.testing.assert_close(output, img_tensor)
+
+
+def test_get_image_transforms_random_erasing_config(img_tensor_factory):
+    img_tensor = img_tensor_factory()
+    tf_cfg = ImageTransformsConfig(
+        enable=True,
+        random_erasing=RandomErasingConfig(
+            enable=True,
+            p=1.0,
+            scale=(0.2, 0.2),
+            ratio=(1.0, 1.0),
+            value=0.0,
+        ),
+    )
+
+    tf = ImageTransforms(tf_cfg)
+    output = tf(img_tensor)
+
+    assert output.shape == img_tensor.shape
+    assert isinstance(tf.transforms["random_erasing"], v2.RandomErasing)
+    with pytest.raises(AssertionError):
+        torch.testing.assert_close(output, img_tensor)
+
+
+def test_apply_camera_dropout_disabled_keeps_images():
+    item = {
+        "observation.images.head_stereo_left": torch.ones(3, 8, 8),
+        "observation.images.head_stereo_right": torch.ones(3, 8, 8) * 2,
+    }
+    original = {key: value.clone() for key, value in item.items()}
+
+    output = apply_camera_dropout(
+        item,
+        list(item),
+        CameraDropoutConfig(enable=False, p=1.0, max_num_cameras=1, min_num_cameras_to_keep=1),
+    )
+
+    assert output is item
+    for key in original:
+        torch.testing.assert_close(output[key], original[key])
+
+
+def test_apply_camera_dropout_masks_one_eligible_camera_with_keep_constraint():
+    item = {
+        "observation.images.head_stereo_left": torch.ones(3, 8, 8),
+        "observation.images.head_stereo_right": torch.ones(3, 8, 8) * 2,
+        "observation.images.wrist_left": torch.ones(3, 8, 8) * 3,
+        "observation.images.wrist_right": torch.ones(3, 8, 8) * 4,
+    }
+    cfg = CameraDropoutConfig(
+        enable=True,
+        p=1.0,
+        max_num_cameras=1,
+        min_num_cameras_to_keep=3,
+        value=0.0,
+        eligible_camera_keys=list(item),
+    )
+
+    with seeded_context(1234):
+        output = apply_camera_dropout(item, list(item), cfg)
+
+    masked_keys = [key for key, image in output.items() if torch.count_nonzero(image) == 0]
+    assert len(masked_keys) == 1
+    assert masked_keys[0] in cfg.eligible_camera_keys
+
+
+def test_apply_camera_dropout_respects_eligible_camera_keys():
+    item = {
+        "observation.images.head_stereo_left": torch.ones(3, 8, 8),
+        "observation.images.head_stereo_right": torch.ones(3, 8, 8) * 2,
+        "observation.images.wrist_left": torch.ones(3, 8, 8) * 3,
+        "observation.images.wrist_right": torch.ones(3, 8, 8) * 4,
+    }
+    cfg = CameraDropoutConfig(
+        enable=True,
+        p=1.0,
+        max_num_cameras=1,
+        min_num_cameras_to_keep=3,
+        value=0.0,
+        eligible_camera_keys=["observation.images.wrist_left"],
+    )
+
+    output = apply_camera_dropout(item, list(item), cfg)
+
+    assert torch.count_nonzero(output["observation.images.wrist_left"]) == 0
+    assert torch.count_nonzero(output["observation.images.head_stereo_left"]) > 0
+    assert torch.count_nonzero(output["observation.images.head_stereo_right"]) > 0
+    assert torch.count_nonzero(output["observation.images.wrist_right"]) > 0
+
+
+def test_dataset_item_applies_camera_dropout_after_image_transforms():
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    dataset = object.__new__(LeRobotDataset)
+    dataset.image_transforms = lambda image: image + 1
+    dataset.camera_dropout = CameraDropoutConfig(
+        enable=True,
+        p=1.0,
+        max_num_cameras=1,
+        min_num_cameras_to_keep=1,
+        value=0.0,
+        eligible_camera_keys=["observation.images.head_stereo_left"],
+    )
+    dataset.delta_indices = None
+    dataset._ensure_hf_dataset_loaded = lambda: None
+    dataset._query_videos = lambda query_timestamps, ep_idx: {}
+    dataset._get_query_timestamps = lambda current_ts, query_indices: []
+    dataset.hf_dataset = [
+        {
+            "episode_index": torch.tensor(0),
+            "timestamp": torch.tensor(0.0),
+            "task_index": torch.tensor(0),
+            "observation.images.head_stereo_left": torch.ones(3, 4, 4),
+            "observation.images.head_stereo_right": torch.ones(3, 4, 4) * 2,
+        }
+    ]
+    dataset.meta = type(
+        "Meta",
+        (),
+        {
+            "video_keys": [],
+            "camera_keys": [
+                "observation.images.head_stereo_left",
+                "observation.images.head_stereo_right",
+            ],
+            "tasks": type("Tasks", (), {"iloc": {0: type("Task", (), {"name": "task"})()}})(),
+        },
+    )()
+
+    item = dataset[0]
+
+    assert torch.count_nonzero(item["observation.images.head_stereo_left"]) == 0
+    torch.testing.assert_close(item["observation.images.head_stereo_right"], torch.ones(3, 4, 4) * 3)
 
 
 def test_get_image_transforms_max_num_transforms(img_tensor_factory):
