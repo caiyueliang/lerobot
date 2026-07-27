@@ -230,7 +230,8 @@ def aggregate_datasets(
     meta_idx = {"chunk": 0, "file": 0}
     data_idx = {"chunk": 0, "file": 0}
     videos_idx = {
-        key: {"chunk": 0, "file": 0, "latest_duration": 0, "episode_duration": 0} for key in video_keys
+        key: {"chunk": 0, "file": 0, "current_duration": 0, "latest_duration": 0, "episode_duration": 0}
+        for key in video_keys
     }
 
     dst_meta.episodes = {}
@@ -282,7 +283,7 @@ def aggregate_videos(src_meta, dst_meta, videos_idx, video_files_size_in_mb, chu
 
         chunk_idx = video_idx["chunk"]
         file_idx = video_idx["file"]
-        current_offset = video_idx["latest_duration"]
+        current_offset = video_idx["current_duration"]
 
         for src_chunk_idx, src_file_idx in unique_chunk_file_pairs:
             src_path = src_meta.root / DEFAULT_VIDEO_PATH.format(
@@ -339,6 +340,7 @@ def aggregate_videos(src_meta, dst_meta, videos_idx, video_files_size_in_mb, chu
 
         videos_idx[key]["chunk"] = chunk_idx
         videos_idx[key]["file"] = file_idx
+        videos_idx[key]["current_duration"] = current_offset
 
     return videos_idx
 
@@ -435,9 +437,13 @@ def aggregate_metadata(src_meta, dst_meta, meta_idx, data_idx, videos_idx):
             aggr_root=dst_meta.root,
         )
 
-    # Increment latest_duration by the total duration added from this source dataset
+    # Keep a backward-compatible global duration for callers that do not provide
+    # per-source-file offsets. Normal aggregation uses current_duration per
+    # destination video file, because timestamps are relative to that file.
     for k in videos_idx:
-        videos_idx[k]["latest_duration"] += videos_idx[k]["episode_duration"]
+        videos_idx[k]["latest_duration"] = videos_idx[k].get("latest_duration", 0) + videos_idx[k][
+            "episode_duration"
+        ]
 
     return meta_idx
 
