@@ -42,6 +42,45 @@ from lerobot.datasets.utils import (
 from lerobot.datasets.video_utils import concatenate_video_files, get_video_duration_in_s
 
 
+def _metadata_label(meta: LeRobotDatasetMetadata) -> str:
+    """生成简洁的数据集标识，方便从日志定位是哪一个源数据集不一致。"""
+    return f"repo_id={meta.repo_id}, root={meta.root}"
+
+
+def _summarize_features(features: dict) -> str:
+    """汇总 feature 名称、dtype 和 shape，用于合并前的 metadata 诊断日志。"""
+    parts = []
+    for name, feature in sorted(features.items()):
+        dtype = feature.get("dtype")
+        shape = feature.get("shape")
+        parts.append(f"{name}(dtype={dtype}, shape={shape})")
+    return "[" + ", ".join(parts) + "]"
+
+
+def _log_feature_mismatch(base_features: dict, current_features: dict) -> None:
+    """在抛出 features 不一致错误前，先打印缺失、额外和定义变化的字段。"""
+    base_keys = set(base_features)
+    current_keys = set(current_features)
+    missing_keys = sorted(base_keys - current_keys)
+    extra_keys = sorted(current_keys - base_keys)
+    changed_keys = sorted(
+        key for key in base_keys & current_keys if base_features[key] != current_features[key]
+    )
+
+    if missing_keys:
+        logging.error("features 缺失字段: %s", missing_keys)
+    if extra_keys:
+        logging.error("features 额外字段: %s", extra_keys)
+    if changed_keys:
+        for key in changed_keys:
+            logging.error(
+                "features 字段定义不一致: key=%s, expected=%s, got=%s",
+                key,
+                base_features[key],
+                current_features[key],
+            )
+
+
 def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]):
     """Validates that all dataset metadata have consistent properties.
 
@@ -62,15 +101,49 @@ def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]):
     fps = all_metadata[0].fps
     robot_type = all_metadata[0].robot_type
     features = all_metadata[0].features
+    logging.info(
+        "metadata 基准: %s, fps=%s, robot_type=%s, total_features=%d, features=%s",
+        _metadata_label(all_metadata[0]),
+        fps,
+        robot_type,
+        len(features),
+        _summarize_features(features),
+    )
 
     for meta in tqdm.tqdm(all_metadata, desc="Validate all meta data"):
+        logging.info(
+            "metadata 检查: %s, fps=%s, robot_type=%s, total_features=%d",
+            _metadata_label(meta),
+            meta.fps,
+            meta.robot_type,
+            len(meta.features),
+        )
         if fps != meta.fps:
+            logging.error(
+                "metadata 不一致: field=fps, dataset=%s, expected=%s, got=%s",
+                _metadata_label(meta),
+                fps,
+                meta.fps,
+            )
             raise ValueError(f"Same fps is expected, but got fps={meta.fps} instead of {fps}.")
         if robot_type != meta.robot_type:
+            logging.error(
+                "metadata 不一致: field=robot_type, dataset=%s, expected=%s, got=%s",
+                _metadata_label(meta),
+                robot_type,
+                meta.robot_type,
+            )
             raise ValueError(
                 f"Same robot_type is expected, but got robot_type={meta.robot_type} instead of {robot_type}."
             )
         if features != meta.features:
+            logging.error(
+                "metadata 不一致: field=features, dataset=%s, expected_total=%d, got_total=%d",
+                _metadata_label(meta),
+                len(features),
+                len(meta.features),
+            )
+            _log_feature_mismatch(features, meta.features)
             raise ValueError(
                 f"Same features is expected, but got features={meta.features} instead of {features}."
             )

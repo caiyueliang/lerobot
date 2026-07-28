@@ -14,13 +14,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 
-from lerobot.datasets.aggregate import aggregate_datasets
+from lerobot.datasets.aggregate import aggregate_datasets, validate_all_metadata
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from tests.fixtures.constants import DUMMY_REPO_ID
+
+
+def test_validate_all_metadata_logs_mismatched_robot_type(caplog):
+    base_features = {
+        "observation.state": {"dtype": "float32", "shape": (16,), "names": None},
+        "action": {"dtype": "float32", "shape": (16,), "names": None},
+    }
+    all_metadata = [
+        SimpleNamespace(
+            repo_id="/data/datasets/base",
+            root="/data/datasets/base",
+            fps=30,
+            robot_type="unitree_g1",
+            features=base_features,
+        ),
+        SimpleNamespace(
+            repo_id="/data/datasets/mismatch",
+            root="/data/datasets/mismatch",
+            fps=30,
+            robot_type="unitree_g1_8520",
+            features=base_features,
+        ),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(ValueError, match="Same robot_type is expected"):
+            validate_all_metadata(all_metadata)
+
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "metadata 基准" in logs
+    assert "/data/datasets/base" in logs
+    assert "metadata 不一致" in logs
+    assert "/data/datasets/mismatch" in logs
+    assert "unitree_g1_8520" in logs
 
 
 def assert_episode_and_frame_counts(aggr_ds, expected_episodes, expected_frames):
