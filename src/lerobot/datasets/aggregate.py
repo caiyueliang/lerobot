@@ -81,6 +81,61 @@ def _log_feature_mismatch(base_features: dict, current_features: dict) -> None:
             )
 
 
+def normalize_episode_tasks(df: pd.DataFrame) -> pd.DataFrame:
+    """统一 episode metadata 的 tasks 列类型，避免 parquet 写入时混用 string/list。
+
+    LeRobot v3 的 episode metadata 约定 ``tasks`` 是 list；如果某个源数据集里写成了
+    单个字符串，和其它 list 格式数据拼接后，pyarrow 会报
+    ``cannot mix list and non-list``。这里在聚合写 metadata 前统一规范成 list[str]。
+    """
+    if "tasks" not in df.columns:
+        return df
+
+    def normalize(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(task) for task in value]
+        if isinstance(value, tuple):
+            return [str(task) for task in value]
+        if hasattr(value, "tolist"):
+            return [str(task) for task in value.tolist()]
+        return [str(value)]
+
+    df = df.copy()
+    df["tasks"] = df["tasks"].map(normalize)
+    return df
+
+
+def _write_dataframe_to_parquet(
+    df: pd.DataFrame,
+    target_path: Path,
+    src_path: Path,
+    contains_images: bool = False,
+) -> None:
+    """带上下文日志写 parquet，便于定位合并失败时的源文件和目标文件。"""
+    try:
+        if contains_images:
+            to_parquet_with_hf_images(df, target_path)
+        else:
+            df.to_parquet(target_path)
+    except Exception:
+        logging.exception(
+            "写入 parquet 失败: src=%s, dst=%s, rows=%d, columns=%s",
+            src_path,
+            target_path,
+            len(df),
+            list(df.columns),
+        )
+        if "tasks" in df.columns:
+            logging.error(
+                "tasks 列类型分布: %s",
+                df["tasks"].map(lambda value: type(value).__name__).value_counts().to_dict(),
+            )
+            logging.error("tasks 列样例: %s", df["tasks"].head(10).tolist())
+        raise
+
+
 def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]):
     """Validates that all dataset metadata have consistent properties.
 
@@ -576,9 +631,20 @@ def aggregate_metadata(src_meta, dst_meta, meta_idx, data_idx, videos_idx):
     }
 
     chunk_file_ids = sorted(chunk_file_ids)
+    logging.info(
+        "开始合并 episode metadata: source=%s, files=%d",
+        _metadata_label(src_meta),
+        len(chunk_file_ids),
+    )
     for chunk_idx, file_idx in chunk_file_ids:
         src_path = src_meta.root / DEFAULT_EPISODES_PATH.format(chunk_index=chunk_idx, file_index=file_idx)
+        logging.info(
+            "读取 episode metadata: source=%s, src=%s",
+            _metadata_label(src_meta),
+            src_path,
+        )
         df = pd.read_parquet(src_path)
+        df = normalize_episode_tasks(df)
         df = update_meta_data(
             df,
             dst_meta,
@@ -587,16 +653,29 @@ def aggregate_metadata(src_meta, dst_meta, meta_idx, data_idx, videos_idx):
             videos_idx,
         )
 
-        meta_idx = append_or_create_parquet_file(
-            df,
-            src_path,
-            meta_idx,
-            DEFAULT_DATA_FILE_SIZE_IN_MB,
-            DEFAULT_CHUNK_SIZE,
-            DEFAULT_EPISODES_PATH,
-            contains_images=False,
-            aggr_root=dst_meta.root,
-        )
+        try:
+            meta_idx = append_or_create_parquet_file(
+                df,
+                src_path,
+                meta_idx,
+                DEFAULT_DATA_FILE_SIZE_IN_MB,
+                DEFAULT_CHUNK_SIZE,
+                DEFAULT_EPISODES_PATH,
+                contains_images=False,
+                aggr_root=dst_meta.root,
+            )
+        except Exception:
+            logging.exception(
+                "写入 episode metadata 失败: source=%s, src=%s, current_dst=(chunk-%03d,file-%03d), "
+                "columns=%s, tasks_sample=%s",
+                _metadata_label(src_meta),
+                src_path,
+                meta_idx["chunk"],
+                meta_idx["file"],
+                list(df.columns),
+                df["tasks"].head(5).tolist() if "tasks" in df.columns else None,
+            )
+            raise
 
     # 保留全局累计时长，兼容没有 src_to_offset 的旧调用路径。
     # 正常聚合会使用 current_duration 按目标 mp4 文件内时间计算，因为 metadata 中的视频时间戳
@@ -641,10 +720,7 @@ def append_or_create_parquet_file(
 
     if not dst_path.exists():
         dst_path.parent.mkdir(parents=True, exist_ok=True)
-        if contains_images:
-            to_parquet_with_hf_images(df, dst_path)
-        else:
-            df.to_parquet(dst_path)
+        _write_dataframe_to_parquet(df, dst_path, src_path, contains_images)
         return idx
 
     src_size = get_parquet_file_size_in_mb(src_path)
@@ -661,10 +737,7 @@ def append_or_create_parquet_file(
         final_df = pd.concat([existing_df, df], ignore_index=True)
         target_path = dst_path
 
-    if contains_images:
-        to_parquet_with_hf_images(final_df, target_path)
-    else:
-        final_df.to_parquet(target_path)
+    _write_dataframe_to_parquet(final_df, target_path, src_path, contains_images)
 
     return idx
 
